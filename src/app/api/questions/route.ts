@@ -59,6 +59,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Valid count required" }, { status: 400 });
     }
 
+    // Parse exclude list (already-answered question IDs)
+    const excludeParam = req.nextUrl.searchParams.get("exclude");
+    const excludeIds = excludeParam ? excludeParam.split(",") : [];
+
     // Calculate proportional distribution
     const totalWeight = topics.reduce((sum, t) => sum + (TOPIC_WEIGHTS[t] || 0), 0);
     const topicCounts: { topic: Topic; count: number }[] = [];
@@ -75,11 +79,16 @@ export async function GET(req: NextRequest) {
       assigned += count;
     });
 
-    // Fetch questions for each topic
+    // Fetch questions for each topic, excluding already-answered ones
     const allQuestions: Array<Record<string, unknown>> = [];
     for (const { topic, count } of topicCounts) {
+      const matchFilter: Record<string, unknown> = { topic };
+      if (excludeIds.length > 0) {
+        const { Types } = await import("mongoose");
+        matchFilter._id = { $nin: excludeIds.map((id) => new Types.ObjectId(id)) };
+      }
       const questions = await Question.aggregate([
-        { $match: { topic } },
+        { $match: matchFilter },
         { $sample: { size: count } },
       ]);
       allQuestions.push(...questions);

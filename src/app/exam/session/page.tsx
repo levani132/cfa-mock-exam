@@ -13,6 +13,7 @@ import {
   FiAlertTriangle,
   FiCoffee,
   FiEye,
+  FiX,
 } from "react-icons/fi";
 
 interface QuestionImage {
@@ -43,59 +44,269 @@ interface ExamConfig {
   mockExamId?: string;
 }
 
+const EXAM_STATE_KEY = "cfa_exam_state";
+
+interface SavedExamState {
+  config: ExamConfig;
+  questions: Question[];
+  currentIndex: number;
+  answers: Record<number, "A" | "B" | "C">;
+  flagged: number[];
+  revealedAnswers: number[];
+  timeLeft: number;
+  session: number;
+  startedAt: string;
+}
+
+function saveExamState(state: SavedExamState) {
+  try {
+    localStorage.setItem(EXAM_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // localStorage might be full
+  }
+}
+
+function loadExamState(): SavedExamState | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const stored = localStorage.getItem(EXAM_STATE_KEY);
+    if (!stored) return null;
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
+}
+
+function clearExamState() {
+  localStorage.removeItem(EXAM_STATE_KEY);
+}
+
+// Compute initial state once at module level so useState initializers can use it
+type InitialData =
+  | { type: "restored"; saved: SavedExamState }
+  | { type: "fresh"; config: ExamConfig; sessionTime: number }
+  | null;
+
+let cachedInitial: InitialData | undefined;
+function getInitialData(): InitialData {
+  if (cachedInitial !== undefined) return cachedInitial;
+  if (typeof window === "undefined") {
+    cachedInitial = null;
+    return null;
+  }
+  const saved = loadExamState();
+  if (saved) {
+    cachedInitial = { type: "restored", saved };
+    return cachedInitial;
+  }
+  const stored = sessionStorage.getItem("exam_config");
+  if (stored) {
+    const config: ExamConfig = JSON.parse(stored);
+    const sessionTime = config.mode === "full" ? 135 * 60 : config.timeLimitMinutes * 60;
+    cachedInitial = { type: "fresh", config, sessionTime };
+    return cachedInitial;
+  }
+  cachedInitial = null;
+  return null;
+}
+
 export default function ExamSessionPage() {
   const router = useRouter();
-  const [config, setConfig] = useState<ExamConfig | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, "A" | "B" | "C">>({});
-  const [flagged, setFlagged] = useState<Set<number>>(new Set());
-  const [timeLeft, setTimeLeft] = useState(0);
+  const init = getInitialData();
+  const restored = init?.type === "restored" ? init.saved : null;
+  const freshConfig = init?.type === "fresh" ? init.config : null;
+
+  const [config] = useState<ExamConfig | null>(restored?.config ?? freshConfig);
+  const [questions, setQuestions] = useState<Question[]>(restored?.questions ?? []);
+  const [currentIndex, setCurrentIndex] = useState(restored?.currentIndex ?? 0);
+  const [answers, setAnswers] = useState<Record<number, "A" | "B" | "C">>(restored?.answers ?? {});
+  const [flagged, setFlagged] = useState<Set<number>>(() => new Set(restored?.flagged ?? []));
+  const [timeLeft, setTimeLeft] = useState(restored?.timeLeft ?? (init?.type === "fresh" ? init.sessionTime : 0));
   const [isPaused, setIsPaused] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!restored);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
-  const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(new Set());
-  const [startedAt] = useState(new Date());
-  const [session, setSession] = useState(1); // For full mock: 1 or 2
+  const [showConfirmExit, setShowConfirmExit] = useState(false);
+  const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(() => new Set(restored?.revealedAnswers ?? []));
+  const startedAtRef = useRef(restored ? new Date(restored.startedAt) : new Date());
+  const [session, setSession] = useState(restored?.session ?? 1);
   const [onBreak, setOnBreak] = useState(false);
   const [breakTimeLeft, setBreakTimeLeft] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const initializedRef = useRef(false);
+  const submitCalledRef = useRef(false);
 
-  // Load config and fetch questions
+  // Persist state to localStorage on every meaningful change
   useEffect(() => {
-    const stored = sessionStorage.getItem("exam_config");
-    if (!stored) {
+    if (!config || questions.length === 0 || loading) return;
+    saveExamState({
+      config,
+      questions,
+      currentIndex,
+      answers,
+      flagged: Array.from(flagged),
+      revealedAnswers: Array.from(revealedAnswers),
+      timeLeft,
+      session,
+      startedAt: startedAtRef.current.toISOString(),
+    });
+  }, [config, questions, currentIndex, answers, flagged, revealedAnswers, timeLeft, session, loading]);
+
+  // Fetch questions for fresh starts (restored state already has questions)
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    // If restored from saved state, questions are already loaded (loading is already false)
+    if (restored) return;
+
+    // No config at all — redirect
+    if (!config) {
       router.push("/exam/setup");
       return;
     }
-    const cfg: ExamConfig = JSON.parse(stored);
-    setConfig(cfg);
 
-    const sessionTime =
-      cfg.mode === "full" ? 135 * 60 : cfg.timeLimitMinutes * 60;
-    setTimeLeft(sessionTime);
+    // Fetch questions helper
+    const doFetch = (url: string) => {
+      fetch(url)
+        .then((r) => r.json())
+        .then((data) => {
+          setQuestions(data.questions || []);
+          setLoading(false);
+        })
+        .catch(() => {
+          setLoading(false);
+        });
+    };
 
-    // Fetch questions
+    // Build URL
     let url: string;
-    if (cfg.mockExamId) {
-      url = `/api/questions?mockExamId=${cfg.mockExamId}`;
+    if (config.mockExamId) {
+      url = `/api/questions?mockExamId=${config.mockExamId}`;
+      doFetch(url);
     } else {
-      const topicsParam = cfg.topics.join(",");
-      const count = cfg.mode === "full" ? 180 : cfg.totalQuestions;
+      const topicsParam = config.topics.join(",");
+      const count = config.mode === "full" ? 180 : config.totalQuestions;
       url = `/api/questions?topics=${encodeURIComponent(topicsParam)}&count=${count}`;
-    }
 
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => {
-        setQuestions(data.questions || []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setLoading(false);
+      // For custom mode, exclude already-answered questions
+      const userId = localStorage.getItem("cfa_user_id");
+      if (config.mode === "custom" && userId) {
+        fetch(`/api/user/progress?userId=${userId}&includeIds=true`)
+          .then((r) => r.json())
+          .then((progress) => {
+            if (progress.answeredIds && progress.answeredIds.length > 0) {
+              url += `&exclude=${progress.answeredIds.join(",")}`;
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            doFetch(url);
+          });
+      } else {
+        doFetch(url);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle submit
+  const handleSubmit = useCallback(
+    async (autoSubmit = false) => {
+      if (!config) return;
+      if (submitCalledRef.current) return;
+
+      // For full mock session 1 — go to break
+      if (config.mode === "full" && session === 1 && !autoSubmit) {
+        setOnBreak(true);
+        setBreakTimeLeft(30 * 60);
+        return;
+      }
+
+      submitCalledRef.current = true;
+      const userId = localStorage.getItem("cfa_user_id");
+      if (!userId) return;
+
+      // Calculate score
+      let correct = 0;
+      const topicCorrect: Record<string, number> = {};
+      const topicTotal: Record<string, number> = {};
+
+      questions.forEach((q, i) => {
+        const topic = q.topic;
+        topicTotal[topic] = (topicTotal[topic] || 0) + 1;
+        if (answers[i] === q.correctAnswer) {
+          correct++;
+          topicCorrect[topic] = (topicCorrect[topic] || 0) + 1;
+        }
       });
-  }, [router]);
+
+      const topicBreakdown = Object.keys(topicTotal).map((topic) => ({
+        topic,
+        correct: topicCorrect[topic] || 0,
+        total: topicTotal[topic],
+        percentage: Math.round(((topicCorrect[topic] || 0) / topicTotal[topic]) * 100),
+      }));
+
+      const examData = {
+        userId: parseInt(userId, 10),
+        config,
+        questionIds: questions.map((q) => q._id),
+        answers: questions.map((q, i) => ({
+          questionId: q._id,
+          selected: answers[i] || null,
+          correct: q.correctAnswer,
+          isCorrect: answers[i] === q.correctAnswer,
+        })),
+        score: correct,
+        totalQuestions: questions.length,
+        percentage: Math.round((correct / questions.length) * 100),
+        topicBreakdown,
+        startedAt: startedAtRef.current.toISOString(),
+        completedAt: new Date().toISOString(),
+        timeSpentSeconds: config.timeLimitMinutes * 60 - timeLeft,
+      };
+
+      try {
+        const res = await fetch("/api/exam", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(examData),
+        });
+        const data = await res.json();
+
+        // Track answered questions for progress
+        await fetch("/api/user/progress", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: parseInt(userId, 10),
+            questionIds: questions.map((q) => q._id),
+          }),
+        }).catch(() => {});
+
+        // Clear saved exam state
+        clearExamState();
+        sessionStorage.removeItem("exam_config");
+
+        // Store for review page
+        sessionStorage.setItem(
+          "exam_result",
+          JSON.stringify({
+            ...examData,
+            examId: data.examId,
+            questions,
+          })
+        );
+
+        router.push("/exam/review");
+      } catch {
+        submitCalledRef.current = false;
+        alert("Failed to save exam. Please try again.");
+      }
+    },
+    [config, session, questions, answers, timeLeft, router]
+  );
 
   // Timer
   useEffect(() => {
@@ -105,7 +316,6 @@ export default function ExamSessionPage() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current!);
-          // Time's up — auto submit
           handleSubmit(true);
           return 0;
         }
@@ -116,8 +326,7 @@ export default function ExamSessionPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, isPaused, onBreak]);
+  }, [loading, isPaused, onBreak, handleSubmit]);
 
   // Break timer
   useEffect(() => {
@@ -185,85 +394,11 @@ export default function ExamSessionPage() {
     setShowGrid(false);
   }
 
-  const handleSubmit = useCallback(
-    async (autoSubmit = false) => {
-      if (!config) return;
-
-      // For full mock session 1 — go to break
-      if (config.mode === "full" && session === 1 && !autoSubmit) {
-        setOnBreak(true);
-        setBreakTimeLeft(30 * 60);
-        return;
-      }
-
-      const userId = localStorage.getItem("cfa_user_id");
-      if (!userId) return;
-
-      // Calculate score
-      let correct = 0;
-      const topicCorrect: Record<string, number> = {};
-      const topicTotal: Record<string, number> = {};
-
-      questions.forEach((q, i) => {
-        const topic = q.topic;
-        topicTotal[topic] = (topicTotal[topic] || 0) + 1;
-        if (answers[i] === q.correctAnswer) {
-          correct++;
-          topicCorrect[topic] = (topicCorrect[topic] || 0) + 1;
-        }
-      });
-
-      const topicBreakdown = Object.keys(topicTotal).map((topic) => ({
-        topic,
-        correct: topicCorrect[topic] || 0,
-        total: topicTotal[topic],
-        percentage: Math.round(((topicCorrect[topic] || 0) / topicTotal[topic]) * 100),
-      }));
-
-      const examData = {
-        userId: parseInt(userId, 10),
-        config,
-        questionIds: questions.map((q) => q._id),
-        answers: questions.map((q, i) => ({
-          questionId: q._id,
-          selected: answers[i] || null,
-          correct: q.correctAnswer,
-          isCorrect: answers[i] === q.correctAnswer,
-        })),
-        score: correct,
-        totalQuestions: questions.length,
-        percentage: Math.round((correct / questions.length) * 100),
-        topicBreakdown,
-        startedAt: startedAt.toISOString(),
-        completedAt: new Date().toISOString(),
-        timeSpentSeconds: config.timeLimitMinutes * 60 - timeLeft,
-      };
-
-      try {
-        const res = await fetch("/api/exam", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(examData),
-        });
-        const data = await res.json();
-
-        // Store for review page
-        sessionStorage.setItem(
-          "exam_result",
-          JSON.stringify({
-            ...examData,
-            examId: data.examId,
-            questions,
-          })
-        );
-
-        router.push("/exam/review");
-      } catch {
-        alert("Failed to save exam. Please try again.");
-      }
-    },
-    [config, session, questions, answers, startedAt, timeLeft, router]
-  );
+  function handleExit() {
+    clearExamState();
+    sessionStorage.removeItem("exam_config");
+    router.push("/exam/setup");
+  }
 
   function endBreak() {
     setOnBreak(false);
@@ -306,7 +441,7 @@ export default function ExamSessionPage() {
   // Break screen
   if (onBreak) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-cfa-navy to-cfa-navy-light flex items-center justify-center p-6">
+      <div className="min-h-screen bg-linear-to-br from-cfa-navy to-cfa-navy-light flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl p-8 max-w-md w-full text-center">
           <FiCoffee className="text-5xl text-cfa-gold mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-cfa-navy mb-2">Break Time</h2>
@@ -343,6 +478,15 @@ export default function ExamSessionPage() {
       <header className="bg-cfa-navy text-white shadow-lg sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
+            {/* Exit Button */}
+            <button
+              onClick={() => setShowConfirmExit(true)}
+              className="p-2 bg-white/10 hover:bg-red-500/30 rounded-lg transition-colors"
+              title="Exit Exam"
+            >
+              <FiX />
+            </button>
+
             {config?.mode === "full" && (
               <span className="bg-white/10 px-3 py-1 rounded-lg text-sm">
                 Session {session}/2
@@ -498,6 +642,7 @@ export default function ExamSessionPage() {
                   .join(" ")}
               </p>
               {currentQ.images?.filter((img) => img.location === "question").map((img, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   key={i}
                   src={`data:${img.contentType};base64,${img.data}`}
@@ -536,7 +681,7 @@ export default function ExamSessionPage() {
                   >
                     <div className="flex items-start gap-3">
                       <span
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
                           revealed && isCorrect
                             ? "bg-emerald-500 text-white"
                             : revealed && selected && !isCorrect
@@ -571,6 +716,7 @@ export default function ExamSessionPage() {
                 <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Explanation</p>
                 <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{currentQ.explanation}</p>
                 {currentQ.images?.filter((img) => img.location === "explanation").map((img, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     key={i}
                     src={`data:${img.contentType};base64,${img.data}`}
@@ -648,6 +794,32 @@ export default function ExamSessionPage() {
                 {config?.mode === "full" && session === 1
                   ? "Start Break"
                   : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Exit Modal */}
+      {showConfirmExit && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold text-cfa-navy mb-2">Exit Exam?</h3>
+            <p className="text-gray-500 text-sm mb-4">
+              Are you sure you want to exit? All progress will be lost and your answers will not be saved.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmExit(false)}
+                className="flex-1 border border-gray-300 text-gray-600 py-2.5 rounded-xl hover:bg-gray-50 font-medium"
+              >
+                Continue Exam
+              </button>
+              <button
+                onClick={handleExit}
+                className="flex-1 bg-red-500 text-white py-2.5 rounded-xl font-bold hover:bg-red-600"
+              >
+                Exit
               </button>
             </div>
           </div>

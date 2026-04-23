@@ -62,6 +62,11 @@ export default function ExamSetupPage() {
     { _id: string; name: string; source: string; totalQuestions: number; timeLimitMinutes: number }[]
   >([]);
   const [selectedMockId, setSelectedMockId] = useState<string>("");
+  const [progress, setProgress] = useState<{
+    answeredCount: number;
+    totalQuestions: number;
+    completedCycles: number;
+  } | null>(null);
 
   useEffect(() => {
     const userId = localStorage.getItem("cfa_user_id");
@@ -81,6 +86,13 @@ export default function ExamSetupPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.mockExams) setMockExams(data.mockExams);
+      })
+      .catch(() => {});
+    // Fetch user progress
+    fetch(`/api/user/progress?userId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.totalQuestions !== undefined) setProgress(data);
       })
       .catch(() => {});
   }, [router]);
@@ -484,6 +496,37 @@ export default function ExamSetupPage() {
               </div>
             </section>
           </>
+        )}
+
+        {/* Start Button */}
+        {/* Progress Tracker */}
+        {progress && progress.totalQuestions > 0 && (
+          <section className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
+            <h3 className="font-semibold text-cfa-navy mb-3">Your Progress</h3>
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+              <span>
+                {progress.answeredCount}/{progress.totalQuestions} questions practiced
+              </span>
+              {progress.completedCycles > 0 && (
+                <span className="bg-cfa-gold/10 text-cfa-navy px-2 py-0.5 rounded-full text-xs font-medium">
+                  Round {progress.completedCycles + 1}
+                </span>
+              )}
+            </div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-cfa-gold rounded-full transition-all"
+                style={{
+                  width: `${Math.round((progress.answeredCount / progress.totalQuestions) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              {Math.round((progress.answeredCount / progress.totalQuestions) * 100)}% complete
+              {progress.completedCycles > 0 &&
+                ` · ${progress.completedCycles} full ${progress.completedCycles === 1 ? "cycle" : "cycles"} completed`}
+            </p>
+          </section>
         )}
 
         {/* Start Button */}

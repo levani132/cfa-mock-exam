@@ -37,6 +37,11 @@ interface ExamResult {
     correctAnswer: "A" | "B" | "C";
     topic: string;
     explanation?: string;
+    images?: {
+      data: string;
+      contentType: string;
+      location: "question" | "explanation";
+    }[];
   }[];
   answers: {
     questionId: string;
@@ -232,6 +237,14 @@ export default function ExamReviewPage() {
                           <p className="text-sm text-gray-700 mb-3">
                             {question.text}
                           </p>
+                          {question.images?.filter((img) => img.location === "question").map((img, i) => (
+                            <img
+                              key={`q-img-${i}`}
+                              src={`data:${img.contentType};base64,${img.data}`}
+                              alt={`Question image ${i + 1}`}
+                              className="mb-3 max-w-full rounded-lg border border-gray-100"
+                            />
+                          ))}
                           {(["A", "B", "C"] as const).map((letter) => {
                             const text =
                               letter === "A"
@@ -276,6 +289,14 @@ export default function ExamReviewPage() {
                             <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
                               <strong>Explanation:</strong>{" "}
                               {question.explanation}
+                              {question.images?.filter((img) => img.location === "explanation").map((img, i) => (
+                                <img
+                                  key={`e-img-${i}`}
+                                  src={`data:${img.contentType};base64,${img.data}`}
+                                  alt={`Explanation image ${i + 1}`}
+                                  className="mt-2 max-w-full rounded-lg"
+                                />
+                              ))}
                             </div>
                           )}
                         </div>

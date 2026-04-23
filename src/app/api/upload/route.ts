@@ -13,6 +13,7 @@ import {
   validateQuestion,
   detectTopicFromExplanation,
 } from "@/lib/pdf-parser";
+import { extractAndMapImages, type QuestionImage } from "@/lib/image-extractor";
 
 export type { ParsedQuestion };
 
@@ -119,6 +120,44 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Extract images from PDFs and attach to parsed questions
+    const imagesByQuestion = new Map<number, QuestionImage[]>();
+    try {
+      if (questionsPdf) {
+        const qBuf = new Uint8Array(await questionsPdf.arrayBuffer());
+        const qImages = await extractAndMapImages(qBuf, "question");
+        for (const [qNum, imgs] of qImages) {
+          imagesByQuestion.set(qNum, [...(imagesByQuestion.get(qNum) || []), ...imgs]);
+        }
+      }
+      if (answersPdf) {
+        const aBuf = new Uint8Array(await answersPdf.arrayBuffer());
+        const aImages = await extractAndMapImages(aBuf, "explanation");
+        for (const [qNum, imgs] of aImages) {
+          imagesByQuestion.set(qNum, [...(imagesByQuestion.get(qNum) || []), ...imgs]);
+        }
+      } else if (questionsPdf && isAnswerFile) {
+        // Single combined file treated as answer file — images are explanations
+        const buf = new Uint8Array(await questionsPdf.arrayBuffer());
+        const imgs = await extractAndMapImages(buf, "explanation");
+        for (const [qNum, qImgs] of imgs) {
+          imagesByQuestion.set(qNum, [...(imagesByQuestion.get(qNum) || []), ...qImgs]);
+        }
+      }
+    } catch (e) {
+      // Image extraction is best-effort; don't fail the upload
+      console.warn("Image extraction failed (pdfimages may not be installed):", e);
+    }
+
+    // Attach images to parsed questions by question number
+    let totalImagesAttached = 0;
+    for (const q of parsed) {
+      if (q.num && imagesByQuestion.has(q.num)) {
+        q.images = imagesByQuestion.get(q.num)!;
+        totalImagesAttached += q.images.length;
+      }
+    }
+
     return NextResponse.json({
       questions: parsed,
       totalParsed: parsed.length,
@@ -127,6 +166,7 @@ export async function POST(req: NextRequest) {
       duplicateIndices,
       warnings: allWarnings,
       source: source || questionsPdf?.name || answersPdf?.name || "PDF Upload",
+      totalImagesAttached,
     });
   } catch (error) {
     console.error("PDF parse error:", error);
@@ -175,6 +215,7 @@ export async function PUT(req: NextRequest) {
               explanation: q.explanation || "",
               source: q.source || source || "PDF Upload",
               textHash: hash,
+              images: q.images || [],
             },
           },
           { upsert: true }

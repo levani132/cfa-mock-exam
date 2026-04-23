@@ -14,6 +14,12 @@ import {
   FiCoffee,
 } from "react-icons/fi";
 
+interface QuestionImage {
+  data: string;
+  contentType: string;
+  location: "question" | "explanation";
+}
+
 interface Question {
   _id: string;
   text: string;
@@ -23,6 +29,7 @@ interface Question {
   correctAnswer: "A" | "B" | "C";
   topic: string;
   explanation?: string;
+  images?: QuestionImage[];
 }
 
 interface ExamConfig {
@@ -480,6 +487,14 @@ export default function ExamSessionPage() {
               <p className="text-gray-800 leading-relaxed whitespace-pre-line">
                 {currentQ.text}
               </p>
+              {currentQ.images?.filter((img) => img.location === "question").map((img, i) => (
+                <img
+                  key={i}
+                  src={`data:${img.contentType};base64,${img.data}`}
+                  alt={`Question image ${i + 1}`}
+                  className="mt-4 max-w-full rounded-lg border border-gray-100"
+                />
+              ))}
             </div>
 
             {/* Options */}

@@ -56,8 +56,6 @@ export default function UploadPage() {
   const [savedCount, setSavedCount] = useState(0);
   const [savedDuplicates, setSavedDuplicates] = useState(0);
   const [error, setError] = useState("");
-  const [seedLoading, setSeedLoading] = useState(false);
-  const [seedResult, setSeedResult] = useState("");
   const [parseStats, setParseStats] = useState<{
     totalParsed: number;
     validCount: number;
@@ -176,30 +174,6 @@ export default function UploadPage() {
     }
   }
 
-  async function seedDatabase() {
-    setSeedLoading(true);
-    setSeedResult("");
-    setError("");
-
-    try {
-      const res = await fetch("/api/seed", {
-        method: "POST",
-        headers: { "x-admin-password": password },
-      });
-      const data = await res.json();
-
-      if (res.ok) {
-        setSeedResult(data.message || `Seeded ${data.inserted} questions!`);
-      } else {
-        setError(data.error || "Seed failed");
-      }
-    } catch {
-      setError("Seed failed. Please try again.");
-    } finally {
-      setSeedLoading(false);
-    }
-  }
-
   function updateQuestion(index: number, field: keyof ParsedQuestion, value: string) {
     setParsedQuestions((prev) =>
       prev.map((q, i) => (i === index ? { ...q, [field]: value } : q))
@@ -306,27 +280,6 @@ export default function UploadPage() {
             {savedDuplicates > 0 && ` (${savedDuplicates} duplicates skipped)`}
           </div>
         )}
-
-        {seedResult && (
-          <div className="mb-6 p-4 bg-blue-50 text-blue-700 rounded-xl text-sm flex items-center gap-2">
-            <FiCheck /> {seedResult}
-          </div>
-        )}
-
-        {/* Seed Section */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-          <h2 className="font-bold text-cfa-navy mb-3">Seed Sample Questions</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Populate the database with 28 sample questions across all 10 topics.
-          </p>
-          <button
-            onClick={seedDatabase}
-            disabled={seedLoading}
-            className="bg-cfa-navy text-white px-6 py-2 rounded-lg hover:bg-cfa-navy-light disabled:opacity-50"
-          >
-            {seedLoading ? "Seeding..." : "Seed Database"}
-          </button>
-        </section>
 
         {/* Upload Section */}
         <section className="bg-white rounded-xl border border-gray-200 p-6 mb-8">

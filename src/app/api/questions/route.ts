@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
           correctAnswer: q.correctAnswer,
           topic: q.topic,
           explanation: q.explanation,
+          images: q.images,
         })),
         mockExamName: mock.name,
       });
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest) {
         correctAnswer: q.correctAnswer,
         topic: q.topic,
         explanation: q.explanation,
+        images: q.images,
       })),
       topicDistribution: topicCounts,
     });

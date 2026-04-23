@@ -30,6 +30,7 @@ export interface ParsedQuestion {
   topic: string;
   explanation?: string;
   warnings?: string[];
+  images?: Array<{ data: string; contentType: string; location: "question" | "explanation" }>;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -85,6 +86,98 @@ export function questionHash(
     .substring(0, 16);
 }
 
+// ── Ligature fix ────────────────────────────────────────────────────────────
+
+/**
+ * Fix broken ligatures from PDF extraction.
+ *
+ * pdf-parse v2 outputs \u0000 (null byte) for PDF ligature glyphs
+ * (fi, fl, ff, ffi, ffl).  This function replaces each \u0000 with the
+ * correct ligature based on surrounding character context.
+ */
+export function fixLigatures(text: string): string {
+  return text.replace(/\u0000/g, (_match, offset: number) => {
+    // Get up to 10 chars of context on each side (within the same word)
+    const before = text.substring(Math.max(0, offset - 10), offset);
+    const after = text.substring(offset + 1, Math.min(text.length, offset + 11));
+
+    // Extract just the word-part before and after the null
+    const beforeWord = before.match(/[A-Za-z'-]*$/)?.[0] ?? "";
+    const afterWord = after.match(/^[A-Za-z'-]*/)?.[0] ?? "";
+    const bLow = beforeWord.toLowerCase();
+    const aLow = afterWord.toLowerCase();
+
+    // ── ffl (very rare — only "Toffler") ──
+    if (bLow.endsWith("to") && aLow.startsWith("ler")) return "ffl";
+
+    // ── ffi ──
+    // efficient, coefficient, sufficient, office, officer, official, traffic
+    if (/[eou]$/i.test(bLow) && /^ci/i.test(aLow)) return "ffi";
+    if (/su$/i.test(bLow) && /^ci/i.test(aLow)) return "ffi";
+    if (/ine$/i.test(bLow) && /^ci/i.test(aLow)) return "ffi";
+    if (/coe$/i.test(bLow) && /^ci/i.test(aLow)) return "ffi";
+    // affiliate
+    if (/a$/i.test(bLow) && /^li/i.test(aLow)) return "ffi";
+    // affirm, affirmative
+    if (/a$/i.test(bLow) && /^rm/i.test(aLow)) return "ffi";
+    // fulfill, fulfilling
+    if (/ful$/i.test(bLow) && /^ll/i.test(aLow)) return "ffi";
+    // traffic
+    if (/tra$/i.test(bLow) && /^c/i.test(aLow)) return "ffi";
+    // difficult
+    if (/di$/i.test(bLow) && /^cult/i.test(aLow)) return "ffi";
+
+    // ── ff at end of word ──
+    // staff, tariff, payoff, cutoff, write-off, plaintiff
+    if (aLow === "" || /^[^a-z]/i.test(after.charAt(0) || " ")) return "ff";
+
+    // ── fl ──
+    // flow, floor, float, flora
+    if (/^o[wrta]/i.test(aLow)) return "fl";
+    // fluctuate, fluctuating
+    if (/^uc/i.test(aLow)) return "fl";
+    // influence
+    if (/^ue/i.test(aLow)) return "fl";
+    // flight
+    if (/^ig/i.test(aLow)) return "fl";
+    // flex, flexible, flexibility
+    if (/^ex/i.test(aLow)) return "fl";
+    // flat, flatter (but not "fiat" which doesn't occur)
+    if (/^at/i.test(aLow) && bLow === "") return "fl";
+    // inflation, deflation, stagflation
+    if (/n$/i.test(bLow) && /^at/i.test(aLow)) return "fl";
+    // reflect, reflecting
+    if (/re$/i.test(bLow) && /^ec/i.test(aLow)) return "fl";
+    // conflict, conflicts
+    if (/con$/i.test(bLow) && /^ic/i.test(aLow)) return "fl";
+
+    // ── ff ──
+    // different, differ
+    if (/di$/i.test(bLow) && /^e/i.test(aLow)) return "ff";
+    // effect, effective (but NOT reflect which was caught above)
+    if (/(?:^|[^r])e$/i.test(bLow) && /^ec/i.test(aLow)) return "ff";
+    // affect, affected, affecting
+    if (/a$/i.test(bLow) && /^ec/i.test(aLow)) return "ff";
+    // offer, offering, offered
+    if (/o$/i.test(bLow) && /^er/i.test(aLow)) return "ff";
+    // buffer
+    if (/u$/i.test(bLow) && /^er/i.test(aLow)) return "ff";
+    // effort, efforts
+    if (/e$/i.test(bLow) && /^ort/i.test(aLow)) return "ff";
+    // offense, offend
+    if (/o$/i.test(bLow) && /^en/i.test(aLow)) return "ff";
+    // offset, offsets
+    if (/o$/i.test(bLow) && /^se/i.test(aLow)) return "ff";
+    // offshore
+    if (/o$/i.test(bLow) && /^sh/i.test(aLow)) return "ff";
+    // offsite
+    if (/o$/i.test(bLow) && /^si/i.test(aLow)) return "ff";
+
+    // ── Default: fi ──
+    return "fi";
+  });
+}
+
 // ── PDF text extraction ─────────────────────────────────────────────────────
 
 /**
@@ -98,7 +191,7 @@ export async function extractTextFromPDF(buffer: Uint8Array): Promise<string> {
   await parser.load();
   const result = await parser.getText();
   if (result && result.pages) {
-    return result.pages.map((p: { text: string }) => p.text).join("\n");
+    return fixLigatures(result.pages.map((p: { text: string }) => p.text).join("\n"));
   }
   return "";
 }
@@ -178,7 +271,7 @@ export async function extractTextWithBoldMarkers(
   }
 
   doc.destroy();
-  return fullText;
+  return fixLigatures(fullText);
 }
 
 // ── Parsers ─────────────────────────────────────────────────────────────────

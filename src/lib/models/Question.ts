@@ -30,6 +30,12 @@ export const TOPIC_WEIGHTS: Record<Topic, number> = {
   "Portfolio Management": 0.095,
 };
 
+export interface IQuestionImage {
+  data: string; // base64-encoded PNG
+  contentType: string; // e.g. "image/png"
+  location: "question" | "explanation";
+}
+
 export interface IQuestion extends Document {
   text: string;
   optionA: string;
@@ -40,6 +46,7 @@ export interface IQuestion extends Document {
   explanation?: string;
   source?: string;
   textHash: string;
+  images?: IQuestionImage[];
   createdAt: Date;
 }
 
@@ -61,6 +68,13 @@ const QuestionSchema = new Schema<IQuestion>({
   explanation: { type: String },
   source: { type: String },
   textHash: { type: String, index: true, unique: true },
+  images: [
+    {
+      data: { type: String },
+      contentType: { type: String, default: "image/png" },
+      location: { type: String, enum: ["question", "explanation"], default: "explanation" },
+    },
+  ],
   createdAt: { type: Date, default: Date.now },
 });
 

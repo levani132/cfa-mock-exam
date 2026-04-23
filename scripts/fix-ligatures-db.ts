@@ -46,7 +46,7 @@ async function main() {
   const NULL_BYTE = "\u0000";
   const affected = allQuestions.filter((doc) =>
     fields.some((f) => {
-      const val = (doc as Record<string, unknown>)[f] as string | undefined;
+      const val = (doc as unknown as Record<string, unknown>)[f] as string | undefined;
       return val && val.includes(NULL_BYTE);
     })
   );
@@ -66,7 +66,7 @@ async function main() {
     let changed = false;
 
     for (const field of fields) {
-      const val = (doc as Record<string, unknown>)[field] as string | undefined;
+      const val = (doc as unknown as Record<string, unknown>)[field] as string | undefined;
       if (val && NULL_RE.test(val)) {
         const fixed = fixLigatures(val);
         if (fixed !== val) {
@@ -90,7 +90,7 @@ async function main() {
           console.log(`--- Question ${doc._id} ---`);
           for (const [field, newVal] of Object.entries(updates)) {
             if (field === "textHash") continue;
-            const oldVal = (doc as Record<string, unknown>)[field] as string;
+            const oldVal = (doc as unknown as Record<string, unknown>)[field] as string;
             // Show first difference
             for (let i = 0; i < oldVal.length; i++) {
               if (oldVal[i] !== newVal[i]) {
@@ -132,7 +132,7 @@ async function main() {
     const remainingDocs = await Question.find({});
     const remaining = remainingDocs.filter((doc) =>
       fields.some((f) => {
-        const val = (doc as Record<string, unknown>)[f] as string | undefined;
+        const val = (doc as unknown as Record<string, unknown>)[f] as string | undefined;
         return val && val.includes("\u0000");
       })
     ).length;

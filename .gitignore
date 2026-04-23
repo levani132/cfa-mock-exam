@@ -36,6 +36,13 @@ yarn-error.log*
 # vercel
 .vercel
 
+# PDF source files (copyrighted)
+/Mocks and QBanks/
+
+# test/debug scripts
+scripts/test-*
+scripts/sample-*
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

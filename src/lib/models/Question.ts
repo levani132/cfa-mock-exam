@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import crypto from "crypto";
 
 export const TOPICS = [
   "Ethical and Professional Standards",
@@ -38,7 +39,16 @@ export interface IQuestion extends Document {
   topic: Topic;
   explanation?: string;
   source?: string;
+  textHash: string;
   createdAt: Date;
+}
+
+/** Generate a stable hash from question text + options for dedup */
+export function questionHash(text: string, optA: string, optB: string, optC: string): string {
+  const normalized = [text, optA, optB, optC]
+    .map((s) => s.replace(/\s+/g, " ").trim().toLowerCase())
+    .join("|");
+  return crypto.createHash("sha256").update(normalized).digest("hex").substring(0, 16);
 }
 
 const QuestionSchema = new Schema<IQuestion>({
@@ -50,6 +60,7 @@ const QuestionSchema = new Schema<IQuestion>({
   topic: { type: String, required: true, enum: TOPICS, index: true },
   explanation: { type: String },
   source: { type: String },
+  textHash: { type: String, index: true, unique: true },
   createdAt: { type: Date, default: Date.now },
 });
 

@@ -49,7 +49,7 @@ const TIME_PRESETS = [
 
 export default function ExamSetupPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"full" | "custom">("custom");
+  const [mode, setMode] = useState<"full" | "custom" | "mock">("custom");
   const [selectedTopics, setSelectedTopics] = useState<string[]>([...TOPICS]);
   const [timeMinutes, setTimeMinutes] = useState(30);
   const [customTimeInput, setCustomTimeInput] = useState("");
@@ -58,6 +58,10 @@ export default function ExamSetupPage() {
   const [showAnswers, setShowAnswers] = useState(true);
   const [loading, setLoading] = useState(false);
   const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({});
+  const [mockExams, setMockExams] = useState<
+    { _id: string; name: string; source: string; totalQuestions: number; timeLimitMinutes: number }[]
+  >([]);
+  const [selectedMockId, setSelectedMockId] = useState<string>("");
 
   useEffect(() => {
     const userId = localStorage.getItem("cfa_user_id");
@@ -70,6 +74,13 @@ export default function ExamSetupPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.byTopic) setQuestionCounts(data.byTopic);
+      })
+      .catch(() => {});
+    // Fetch available mock exams
+    fetch("/api/mock-exams")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.mockExams) setMockExams(data.mockExams);
       })
       .catch(() => {});
   }, [router]);
@@ -124,17 +135,28 @@ export default function ExamSetupPage() {
 
   async function startExam() {
     if (mode === "custom" && selectedTopics.length === 0) return;
+    if (mode === "mock" && !selectedMockId) return;
 
     setLoading(true);
 
-    const config = {
-      mode,
-      topics: mode === "full" ? [...TOPICS] : selectedTopics,
-      totalQuestions: mode === "full" ? 180 : questionCount,
-      timeLimitMinutes: mode === "full" ? 270 : timeMinutes,
-      canPauseTimer: mode === "full" ? false : canPause,
-      showCorrectAnswers: mode === "full" ? false : showAnswers,
-    };
+    const config = mode === "mock"
+      ? {
+          mode: "mock" as const,
+          mockExamId: selectedMockId,
+          topics: [...TOPICS],
+          totalQuestions: mockExams.find((m) => m._id === selectedMockId)?.totalQuestions || 90,
+          timeLimitMinutes: mockExams.find((m) => m._id === selectedMockId)?.timeLimitMinutes || 270,
+          canPauseTimer: false,
+          showCorrectAnswers: false,
+        }
+      : {
+          mode,
+          topics: mode === "full" ? [...TOPICS] : selectedTopics,
+          totalQuestions: mode === "full" ? 180 : questionCount,
+          timeLimitMinutes: mode === "full" ? 270 : timeMinutes,
+          canPauseTimer: mode === "full" ? false : canPause,
+          showCorrectAnswers: mode === "full" ? false : showAnswers,
+        };
 
     // Store config and navigate
     sessionStorage.setItem("exam_config", JSON.stringify(config));
@@ -163,7 +185,7 @@ export default function ExamSetupPage() {
         {/* Mode Selection */}
         <section className="mb-8">
           <h2 className="text-lg font-bold text-cfa-navy mb-4">Exam Mode</h2>
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-3 gap-4">
             <button
               onClick={() => setMode("full")}
               className={`p-5 rounded-xl border-2 text-left transition-all ${
@@ -180,6 +202,24 @@ export default function ExamSetupPage() {
               </div>
               <p className="text-sm text-gray-500">
                 180 questions · 2 sessions · 135 min each · 30 min break
+              </p>
+            </button>
+            <button
+              onClick={() => setMode("mock")}
+              className={`p-5 rounded-xl border-2 text-left transition-all ${
+                mode === "mock"
+                  ? "border-cfa-gold bg-cfa-gold/5 shadow-md"
+                  : "border-gray-200 bg-white hover:border-gray-300"
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <FiBookOpen
+                  className={`text-xl ${mode === "mock" ? "text-cfa-gold" : "text-gray-400"}`}
+                />
+                <span className="font-semibold text-cfa-navy">Named Mock Exam</span>
+              </div>
+              <p className="text-sm text-gray-500">
+                Take a specific Schweser/Kaplan mock exam
               </p>
             </button>
             <button
@@ -203,7 +243,47 @@ export default function ExamSetupPage() {
           </div>
         </section>
 
-        {mode === "full" ? (
+        {mode === "mock" ? (
+          /* Mock Exam Selection */
+          <section className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
+            <h3 className="font-semibold text-cfa-navy mb-4">Select Mock Exam</h3>
+            {mockExams.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No mock exams available. Upload mock exam PDFs first.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {mockExams.map((mock) => (
+                  <button
+                    key={mock._id}
+                    onClick={() => setSelectedMockId(mock._id)}
+                    className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
+                      selectedMockId === mock._id
+                        ? "border-cfa-gold bg-cfa-gold/5"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-cfa-navy">{mock.name}</p>
+                        <p className="text-xs text-gray-500">{mock.source}</p>
+                      </div>
+                      <div className="text-right text-sm text-gray-500">
+                        <p>{mock.totalQuestions} questions</p>
+                        <p>{mock.timeLimitMinutes} min</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedMockId && (
+              <div className="mt-4 p-3 bg-amber-50 text-amber-800 text-sm rounded-lg">
+                Timer cannot be paused. Correct answers shown only after completing the exam.
+              </div>
+            )}
+          </section>
+        ) : mode === "full" ? (
           /* Full Mock Info */
           <section className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
             <h3 className="font-semibold text-cfa-navy mb-4">Full Mock Exam Details</h3>
@@ -410,7 +490,7 @@ export default function ExamSetupPage() {
         <div className="sticky bottom-0 bg-gray-50 py-4 border-t border-gray-200">
           <button
             onClick={startExam}
-            disabled={loading || (mode === "custom" && selectedTopics.length === 0)}
+            disabled={loading || (mode === "custom" && selectedTopics.length === 0) || (mode === "mock" && !selectedMockId)}
             className="w-full bg-cfa-gold hover:bg-cfa-gold-light text-cfa-navy font-bold py-4 rounded-xl text-lg transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <FiPlay />
@@ -418,6 +498,8 @@ export default function ExamSetupPage() {
               ? "Loading Questions..."
               : mode === "full"
               ? "Start Full Mock Exam (180 Questions)"
+              : mode === "mock"
+              ? `Start Mock Exam${selectedMockId ? ` (${mockExams.find((m) => m._id === selectedMockId)?.totalQuestions || ""} Questions)` : ""}`
               : `Start Exam (${questionCount} Questions)`}
           </button>
         </div>

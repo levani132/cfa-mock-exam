@@ -67,10 +67,16 @@ export default function ExamSessionPage() {
     setTimeLeft(sessionTime);
 
     // Fetch questions
-    const topicsParam = cfg.topics.join(",");
-    const count = cfg.mode === "full" ? 180 : cfg.totalQuestions;
+    let url: string;
+    if ((cfg as Record<string, unknown>).mockExamId) {
+      url = `/api/questions?mockExamId=${(cfg as Record<string, unknown>).mockExamId}`;
+    } else {
+      const topicsParam = cfg.topics.join(",");
+      const count = cfg.mode === "full" ? 180 : cfg.totalQuestions;
+      url = `/api/questions?topics=${encodeURIComponent(topicsParam)}&count=${count}`;
+    }
 
-    fetch(`/api/questions?topics=${encodeURIComponent(topicsParam)}&count=${count}`)
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
         setQuestions(data.questions || []);

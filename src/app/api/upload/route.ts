@@ -1,87 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import { Question, TOPICS } from "@/lib/models/Question";
+import { Question } from "@/lib/models/Question";
+import {
+  type ParsedQuestion,
+  TOPICS,
+  type Topic,
+  questionHash,
+  extractTextFromPDF,
+  extractTextWithBoldMarkers,
+  parseQuestions,
+  mergeQuestionsAndAnswers,
+  validateQuestion,
+  detectTopicFromExplanation,
+} from "@/lib/pdf-parser";
 
-interface ParsedQuestion {
-  text: string;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  correctAnswer: "A" | "B" | "C";
-  topic: string;
-  explanation?: string;
-}
+export type { ParsedQuestion };
 
-function parsePDFText(text: string): ParsedQuestion[] {
-  const questions: ParsedQuestion[] = [];
-
-  // Strategy 1: Match numbered questions with A/B/C options
-  // Pattern: "1. Question text\nA. option\nB. option\nC. option"
-  const pattern1 =
-    /(?:^|\n)\s*(\d+)[.)]\s*([\s\S]*?)(?:\n\s*[Aa][.)]\s*([\s\S]*?))(?:\n\s*[Bb][.)]\s*([\s\S]*?))(?:\n\s*[Cc][.)]\s*([\s\S]*?))(?=\n\s*(?:\d+[.)]|\Z))/gm;
-
-  let match;
-  while ((match = pattern1.exec(text)) !== null) {
-    const questionText = match[2].trim();
-    const optA = match[3].trim();
-    const optB = match[4].trim();
-    const optC = match[5].trim();
-
-    if (questionText.length > 10 && optA && optB && optC) {
-      questions.push({
-        text: questionText,
-        optionA: optA,
-        optionB: optB,
-        optionC: optC,
-        correctAnswer: "A",
-        topic: TOPICS[0],
-      });
-    }
-  }
-
-  // Strategy 2: Try alternative format - "Question N:" style
-  if (questions.length === 0) {
-    const pattern2 =
-      /Question\s+(\d+)[:.]\s*([\s\S]*?)(?:\n\s*[Aa][.)]\s*([\s\S]*?))(?:\n\s*[Bb][.)]\s*([\s\S]*?))(?:\n\s*[Cc][.)]\s*([\s\S]*?))(?=\nQuestion|\n\s*$|\Z)/gim;
-
-    while ((match = pattern2.exec(text)) !== null) {
-      const questionText = match[2].trim();
-      const optA = match[3].trim();
-      const optB = match[4].trim();
-      const optC = match[5].trim();
-
-      if (questionText.length > 10 && optA && optB && optC) {
-        questions.push({
-          text: questionText,
-          optionA: optA,
-          optionB: optB,
-          optionC: optC,
-          correctAnswer: "A",
-          topic: TOPICS[0],
-        });
-      }
-    }
-  }
-
-  // Try to extract answer key from the end of the document
-  const answerKeyPattern = /(?:Answer|Key|Solution)\s*(?:Key)?\s*\n([\s\S]+)$/i;
-  const answerSection = answerKeyPattern.exec(text);
-  if (answerSection) {
-    const answerLines = answerSection[1];
-    const answerPattern = /(\d+)\s*[.):]\s*([AaBbCc])/g;
-    let ansMatch;
-    while ((ansMatch = answerPattern.exec(answerLines)) !== null) {
-      const qNum = parseInt(ansMatch[1], 10) - 1;
-      const answer = ansMatch[2].toUpperCase() as "A" | "B" | "C";
-      if (qNum >= 0 && qNum < questions.length) {
-        questions[qNum].correctAnswer = answer;
-      }
-    }
-  }
-
-  return questions;
-}
-
+/** POST: Parse PDF file(s) and return parsed questions with validation */
 export async function POST(req: NextRequest) {
   try {
     const password = req.headers.get("x-admin-password");
@@ -90,36 +25,108 @@ export async function POST(req: NextRequest) {
     }
 
     const formData = await req.formData();
-    const file = formData.get("pdf") as File;
+    const questionsPdf = formData.get("pdf") as File | null;
+    const answersPdf = formData.get("answersPdf") as File | null;
     const topicOverride = formData.get("topic") as string | null;
     const source = formData.get("source") as string | null;
+    const isAnswerFile = formData.get("isAnswerFile") === "true";
 
-    if (!file) {
-      return NextResponse.json({ error: "PDF file required" }, { status: 400 });
+    if (!questionsPdf && !answersPdf) {
+      return NextResponse.json({ error: "At least one PDF file is required" }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    let parsed: ParsedQuestion[] = [];
 
-    // Dynamic import pdf-parse
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfParse = ((await import("pdf-parse")) as any).default;
-    const pdfData = await pdfParse(buffer);
-    const text = pdfData.text;
+    if (questionsPdf && answersPdf) {
+      // Separate Q + A files — try bold markers on the answer file for Schweser
+      const qBuf = new Uint8Array(await questionsPdf.arrayBuffer());
+      const aBuf = new Uint8Array(await answersPdf.arrayBuffer());
 
-    const parsed = parsePDFText(text);
+      const qText = await extractTextFromPDF(qBuf);
 
-    // Apply topic override if provided
-    if (topicOverride && TOPICS.includes(topicOverride as typeof TOPICS[number])) {
-      parsed.forEach((q) => {
+      let aText: string;
+      if (/Question\s+#\d+\s+of\s+\d+/i.test(qText)) {
+        aText = await extractTextWithBoldMarkers(aBuf);
+      } else {
+        aText = await extractTextFromPDF(aBuf);
+      }
+
+      const questionsOnly = parseQuestions(qText, false);
+      const answersOnly = parseQuestions(aText, true);
+      parsed = mergeQuestionsAndAnswers(questionsOnly, answersOnly);
+    } else if (questionsPdf) {
+      const buf = new Uint8Array(await questionsPdf.arrayBuffer());
+
+      let text: string;
+      if (isAnswerFile) {
+        const peek = await extractTextFromPDF(buf);
+        if (/Question\s+#\d+\s+of\s+\d+/i.test(peek)) {
+          text = await extractTextWithBoldMarkers(buf);
+        } else {
+          text = peek;
+        }
+      } else {
+        text = await extractTextFromPDF(buf);
+      }
+
+      parsed = parseQuestions(text, isAnswerFile);
+    } else if (answersPdf) {
+      const buf = new Uint8Array(await answersPdf.arrayBuffer());
+      const peek = await extractTextFromPDF(buf);
+      let text: string;
+      if (/Question\s+#\d+\s+of\s+\d+/i.test(peek)) {
+        text = await extractTextWithBoldMarkers(buf);
+      } else {
+        text = peek;
+      }
+      parsed = parseQuestions(text, true);
+    }
+
+    // Apply topic: override → detection from explanation → default
+    for (const q of parsed) {
+      if (topicOverride && (TOPICS as readonly string[]).includes(topicOverride)) {
         q.topic = topicOverride;
-      });
+      } else {
+        const detected = detectTopicFromExplanation(q.explanation);
+        if (detected) q.topic = detected;
+      }
+    }
+
+    // Validate all questions
+    const allWarnings: string[] = [];
+    parsed.forEach((q, i) => {
+      const result = validateQuestion(q, i);
+      q.warnings = result.warnings;
+      allWarnings.push(...result.warnings);
+    });
+
+    // Check for duplicates against DB
+    await connectDB();
+    let duplicateCount = 0;
+    const duplicateIndices: number[] = [];
+
+    for (let i = 0; i < parsed.length; i++) {
+      const q = parsed[i];
+      if (q.text && q.optionA && q.optionB && q.optionC) {
+        const hash = questionHash(q.text, q.optionA, q.optionB, q.optionC);
+        const existing = await Question.findOne({ textHash: hash });
+        if (existing) {
+          duplicateCount++;
+          duplicateIndices.push(i);
+          if (!q.warnings) q.warnings = [];
+          q.warnings.push(`Q${i + 1}: Duplicate - already exists in database`);
+        }
+      }
     }
 
     return NextResponse.json({
-      extractedText: text.substring(0, 2000),
       questions: parsed,
-      totalPages: pdfData.numpages,
-      source: source || file.name,
+      totalParsed: parsed.length,
+      validCount: parsed.filter((q) => !q.warnings?.length).length,
+      duplicateCount,
+      duplicateIndices,
+      warnings: allWarnings,
+      source: source || questionsPdf?.name || answersPdf?.name || "PDF Upload",
     });
   } catch (error) {
     console.error("PDF parse error:", error);
@@ -127,7 +134,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Save parsed questions to DB
+/** PUT: Save parsed questions to DB with dedup */
 export async function PUT(req: NextRequest) {
   try {
     const password = req.headers.get("x-admin-password");
@@ -142,20 +149,53 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Questions array required" }, { status: 400 });
     }
 
-    const docs = questions.map((q: ParsedQuestion & { source?: string }) => ({
-      text: q.text,
-      optionA: q.optionA,
-      optionB: q.optionB,
-      optionC: q.optionC,
-      correctAnswer: q.correctAnswer,
-      topic: q.topic,
-      explanation: q.explanation || "",
-      source: q.source || source || "PDF Upload",
-    }));
+    let inserted = 0;
+    let duplicates = 0;
+    let errors = 0;
 
-    const result = await Question.insertMany(docs);
+    for (const q of questions) {
+      if (!q.correctAnswer || !["A", "B", "C"].includes(q.correctAnswer)) {
+        errors++;
+        continue;
+      }
 
-    return NextResponse.json({ inserted: result.length });
+      const hash = questionHash(q.text, q.optionA, q.optionB, q.optionC);
+
+      try {
+        const result = await Question.updateOne(
+          { textHash: hash },
+          {
+            $setOnInsert: {
+              text: q.text,
+              optionA: q.optionA,
+              optionB: q.optionB,
+              optionC: q.optionC,
+              correctAnswer: q.correctAnswer,
+              topic: q.topic,
+              explanation: q.explanation || "",
+              source: q.source || source || "PDF Upload",
+              textHash: hash,
+            },
+          },
+          { upsert: true }
+        );
+
+        if (result.upsertedCount > 0) {
+          inserted++;
+        } else {
+          duplicates++;
+        }
+      } catch (e: unknown) {
+        const mongoErr = e as { code?: number };
+        if (mongoErr.code === 11000) {
+          duplicates++;
+        } else {
+          errors++;
+        }
+      }
+    }
+
+    return NextResponse.json({ inserted, duplicates, errors });
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

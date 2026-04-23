@@ -1,10 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Question, TOPIC_WEIGHTS, type Topic } from "@/lib/models/Question";
+import { MockExam } from "@/lib/models/MockExam";
 
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
+
+    // Check for mock exam mode
+    const mockExamId = req.nextUrl.searchParams.get("mockExamId");
+    if (mockExamId) {
+      const mock = await MockExam.findById(mockExamId);
+      if (!mock) {
+        return NextResponse.json({ error: "Mock exam not found" }, { status: 404 });
+      }
+      const questions = await Question.find({ _id: { $in: mock.questionIds } });
+      return NextResponse.json({
+        questions: questions.map((q) => ({
+          _id: q._id,
+          text: q.text,
+          optionA: q.optionA,
+          optionB: q.optionB,
+          optionC: q.optionC,
+          correctAnswer: q.correctAnswer,
+          topic: q.topic,
+          explanation: q.explanation,
+        })),
+        mockExamName: mock.name,
+      });
+    }
+
     const topicsParam = req.nextUrl.searchParams.get("topics");
     const countParam = req.nextUrl.searchParams.get("count");
 

@@ -70,7 +70,7 @@ export default function ExamSetupPage() {
       return;
     }
     // Fetch available question counts
-    fetch("/api/seed")
+    fetch("/api/questions?counts")
       .then((r) => r.json())
       .then((data) => {
         if (data.byTopic) setQuestionCounts(data.byTopic);

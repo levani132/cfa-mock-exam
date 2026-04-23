@@ -7,6 +7,20 @@ export async function GET(req: NextRequest) {
   try {
     await connectDB();
 
+    // Return question counts by topic
+    if (req.nextUrl.searchParams.get("counts") !== null) {
+      const counts = await Question.aggregate([
+        { $group: { _id: "$topic", count: { $sum: 1 } } },
+      ]);
+      const byTopic: Record<string, number> = {};
+      let total = 0;
+      for (const c of counts) {
+        byTopic[c._id] = c.count;
+        total += c.count;
+      }
+      return NextResponse.json({ byTopic, total });
+    }
+
     // Check for mock exam mode
     const mockExamId = req.nextUrl.searchParams.get("mockExamId");
     if (mockExamId) {

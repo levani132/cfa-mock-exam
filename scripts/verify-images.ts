@@ -8,7 +8,7 @@ async function main() {
   const Q = mongoose.connection.collection("questions");
   const withImages = await Q.countDocuments({images:{$exists:true,$not:{$size:0}}});
   const totalImages = await Q.aggregate([{$project:{count:{$size:{$ifNull:["$images",[]]}}}},{$group:{_id:null,total:{$sum:"$count"}}}]).toArray();
-  const sample = await Q.findOne({images:{$exists:true,$not:{$size:0}}},{text:1,"images.location":1,"images.contentType":1});
+  const sample = await Q.findOne({images:{$exists:true,$not:{$size:0}}},{projection:{text:1,"images.location":1,"images.contentType":1}});
   console.log("Questions with images:", withImages);
   console.log("Total images:", totalImages[0]?.total || 0);
   if(sample) console.log("Sample:", JSON.stringify({text: (sample.text as string).substring(0,100), imageCount: (sample.images as any[]).length, locations: (sample.images as any[]).map((i:any)=>i.location)},null,2));

@@ -39,6 +39,7 @@ interface ExamConfig {
   timeLimitMinutes: number;
   canPauseTimer: boolean;
   showCorrectAnswers: boolean;
+  mockExamId?: string;
 }
 
 export default function ExamSessionPage() {
@@ -75,8 +76,8 @@ export default function ExamSessionPage() {
 
     // Fetch questions
     let url: string;
-    if ((cfg as Record<string, unknown>).mockExamId) {
-      url = `/api/questions?mockExamId=${(cfg as Record<string, unknown>).mockExamId}`;
+    if (cfg.mockExamId) {
+      url = `/api/questions?mockExamId=${cfg.mockExamId}`;
     } else {
       const topicsParam = cfg.topics.join(",");
       const count = cfg.mode === "full" ? 180 : cfg.totalQuestions;

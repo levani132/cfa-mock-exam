@@ -12,6 +12,7 @@ import {
   FiGrid,
   FiAlertTriangle,
   FiCoffee,
+  FiEye,
 } from "react-icons/fi";
 
 interface QuestionImage {
@@ -54,6 +55,7 @@ export default function ExamSessionPage() {
   const [showGrid, setShowGrid] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+  const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(new Set());
   const [startedAt] = useState(new Date());
   const [session, setSession] = useState(1); // For full mock: 1 or 2
   const [onBreak, setOnBreak] = useState(false);
@@ -515,13 +517,19 @@ export default function ExamSessionPage() {
                     ? currentQ.optionB
                     : currentQ.optionC;
                 const selected = answers[globalIndex] === letter;
+                const revealed = revealedAnswers.has(globalIndex);
+                const isCorrect = letter === currentQ.correctAnswer;
 
                 return (
                   <button
                     key={letter}
                     onClick={() => selectAnswer(letter)}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                      selected
+                      revealed && isCorrect
+                        ? "border-emerald-500 bg-emerald-50"
+                        : revealed && selected && !isCorrect
+                        ? "border-red-400 bg-red-50"
+                        : selected
                         ? "border-cfa-navy bg-cfa-navy/5"
                         : "border-gray-200 bg-white hover:border-gray-300"
                     }`}
@@ -529,7 +537,11 @@ export default function ExamSessionPage() {
                     <div className="flex items-start gap-3">
                       <span
                         className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                          selected
+                          revealed && isCorrect
+                            ? "bg-emerald-500 text-white"
+                            : revealed && selected && !isCorrect
+                            ? "bg-red-400 text-white"
+                            : selected
                             ? "bg-cfa-navy text-white"
                             : "bg-gray-100 text-gray-500"
                         }`}
@@ -542,6 +554,32 @@ export default function ExamSessionPage() {
                 );
               })}
             </div>
+
+            {/* Show Answer Button */}
+            {config?.showCorrectAnswers && !revealedAnswers.has(globalIndex) && (
+              <button
+                onClick={() => setRevealedAnswers(prev => new Set(prev).add(globalIndex))}
+                className="w-full mb-6 py-3 rounded-xl border-2 border-dashed border-cfa-navy/30 text-cfa-navy/70 hover:border-cfa-navy/50 hover:text-cfa-navy hover:bg-cfa-navy/5 transition-all text-sm font-medium flex items-center justify-center gap-2"
+              >
+                <FiEye /> Show Answer & Explanation
+              </button>
+            )}
+
+            {/* Explanation (when revealed) */}
+            {revealedAnswers.has(globalIndex) && currentQ.explanation && (
+              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-5">
+                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Explanation</p>
+                <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{currentQ.explanation}</p>
+                {currentQ.images?.filter((img) => img.location === "explanation").map((img, i) => (
+                  <img
+                    key={i}
+                    src={`data:${img.contentType};base64,${img.data}`}
+                    alt={`Explanation image ${i + 1}`}
+                    className="mt-3 max-w-full rounded-lg border border-blue-100"
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Navigation */}
             <div className="flex items-center justify-between">

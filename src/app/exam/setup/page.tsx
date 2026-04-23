@@ -470,7 +470,7 @@ export default function ExamSetupPage() {
                         Show Correct Answers
                       </p>
                       <p className="text-xs text-gray-400">
-                        See correct answers during review
+                        Reveal answers & explanations during the exam
                       </p>
                     </div>
                   </div>

@@ -486,7 +486,14 @@ export default function ExamSessionPage() {
             {/* Question text */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
               <p className="text-gray-800 leading-relaxed whitespace-pre-line">
-                {currentQ.text}
+                {currentQ.text.split('\n')
+                  .map((line, i, arr) =>
+                    i < arr.length - 1
+                    && !(arr[i + 1].charAt(0) === arr[i + 1].charAt(0).toLowerCase()
+                      && arr[i + 1].charAt(0) !== arr[i + 1].charAt(0).toUpperCase())
+                    ? `${line}\n`
+                    : line)
+                  .join(" ")}
               </p>
               {currentQ.images?.filter((img) => img.location === "question").map((img, i) => (
                 <img

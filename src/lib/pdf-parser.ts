@@ -599,8 +599,14 @@ export function mergeQuestionsAndAnswers(
     return questionsOnly.map((q) => {
       const answer = q.num != null ? answerMap.get(q.num) : undefined;
       if (answer) {
+        // Prefer the longer question text — answer files often contain table
+        // data that is rendered as images (non-extractable) in question PDFs.
+        const useAnswerText =
+          answer.text &&
+          answer.text.length > (q.text?.length || 0) + 20;
         return {
           ...q,
+          text: useAnswerText ? answer.text : q.text,
           correctAnswer: answer.correctAnswer || q.correctAnswer,
           explanation: answer.explanation || q.explanation,
         };
@@ -613,8 +619,12 @@ export function mergeQuestionsAndAnswers(
   return questionsOnly.map((q, i) => {
     const answer = answersOnly[i];
     if (answer) {
+      const useAnswerText =
+        answer.text &&
+        answer.text.length > (q.text?.length || 0) + 20;
       return {
         ...q,
+        text: useAnswerText ? answer.text : q.text,
         correctAnswer: answer.correctAnswer || q.correctAnswer,
         explanation: answer.explanation || q.explanation,
       };

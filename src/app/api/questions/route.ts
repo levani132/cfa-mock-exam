@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { Question, TOPIC_WEIGHTS, type Topic } from "@/lib/models/Question";
 import { MockExam } from "@/lib/models/MockExam";
@@ -84,8 +85,7 @@ export async function GET(req: NextRequest) {
     for (const { topic, count } of topicCounts) {
       const matchFilter: Record<string, unknown> = { topic };
       if (excludeIds.length > 0) {
-        const { Types } = await import("mongoose");
-        matchFilter._id = { $nin: excludeIds.map((id) => new Types.ObjectId(id)) };
+        matchFilter._id = { $nin: excludeIds.map((id) => new mongoose.Types.ObjectId(id)) };
       }
       const questions = await Question.aggregate([
         { $match: matchFilter },

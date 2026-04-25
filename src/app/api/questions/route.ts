@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
       const proportion = totalWeight > 0 ? weight / totalWeight : 1 / topics.length;
       const count =
         i === topics.length - 1
-          ? totalCount - assigned
+          ? Math.max(0, totalCount - assigned)
           : Math.round(proportion * totalCount);
       topicCounts.push({ topic, count });
       assigned += count;
@@ -91,6 +91,7 @@ export async function GET(req: NextRequest) {
     // Fetch questions for each topic, excluding already-answered ones
     const allQuestions: Array<Record<string, unknown>> = [];
     for (const { topic, count } of topicCounts) {
+      if (count <= 0) continue;
       const matchFilter: Record<string, unknown> = { topic };
       if (excludeObjectIds.length > 0) {
         matchFilter._id = { $nin: excludeObjectIds };

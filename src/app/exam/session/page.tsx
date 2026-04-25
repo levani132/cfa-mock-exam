@@ -14,6 +14,7 @@ import {
   FiCoffee,
   FiEye,
   FiX,
+  FiEdit3,
 } from "react-icons/fi";
 
 interface QuestionImage {
@@ -89,7 +90,8 @@ type InitialData =
 
 let cachedInitial: InitialData | undefined;
 function getInitialData(): InitialData {
-  if (cachedInitial !== undefined) return cachedInitial;
+  // Always re-read from storage — the module-level cache must not survive across navigations
+  cachedInitial = undefined;
   if (typeof window === "undefined") {
     cachedInitial = null;
     return null;
@@ -127,6 +129,7 @@ export default function ExamSessionPage() {
   const [loading, setLoading] = useState(!restored);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [showConfirmExit, setShowConfirmExit] = useState(false);
+  const [overrideMode, setOverrideMode] = useState<number | null>(null);
   const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(() => new Set(restored?.revealedAnswers ?? []));
   const startedAtRef = useRef(restored ? new Date(restored.startedAt) : new Date());
   const [session, setSession] = useState(restored?.session ?? 1);
@@ -398,6 +401,25 @@ export default function ExamSessionPage() {
     clearExamState();
     sessionStorage.removeItem("exam_config");
     router.push("/exam/setup");
+  }
+
+  async function handleOverrideAnswer(questionId: string, newAnswer: "A" | "B" | "C") {
+    try {
+      const res = await fetch("/api/questions/answer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId, correctAnswer: newAnswer }),
+      });
+      if (!res.ok) return;
+      setQuestions((prev) =>
+        prev.map((q) =>
+          q._id === questionId ? { ...q, correctAnswer: newAnswer } : q
+        )
+      );
+      setOverrideMode(null);
+    } catch {
+      // ignore
+    }
   }
 
   function endBreak() {
@@ -724,6 +746,48 @@ export default function ExamSessionPage() {
                     className="mt-3 max-w-full rounded-lg border border-blue-100"
                   />
                 ))}
+              </div>
+            )}
+
+            {/* Override correct answer (when revealed) */}
+            {revealedAnswers.has(globalIndex) && (
+              <div className="mb-6">
+                {overrideMode === globalIndex ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">
+                      Select the correct answer:
+                    </p>
+                    <div className="flex gap-2">
+                      {(["A", "B", "C"] as const).map((letter) => (
+                        <button
+                          key={letter}
+                          onClick={() => handleOverrideAnswer(currentQ._id, letter)}
+                          className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${
+                            letter === currentQ.correctAnswer
+                              ? "bg-emerald-500 text-white"
+                              : "bg-white border border-amber-300 text-amber-700 hover:bg-amber-100"
+                          }`}
+                        >
+                          {letter}
+                          {letter === currentQ.correctAnswer && " (current)"}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setOverrideMode(null)}
+                      className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setOverrideMode(globalIndex)}
+                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-amber-600 transition-colors"
+                  >
+                    <FiEdit3 /> Override correct answer
+                  </button>
+                )}
               </div>
             )}
 

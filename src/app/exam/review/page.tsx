@@ -10,6 +10,7 @@ import {
   FiBarChart2,
   FiChevronDown,
   FiChevronUp,
+  FiEdit3,
 } from "react-icons/fi";
 
 interface ExamResult {
@@ -59,6 +60,61 @@ export default function ExamReviewPage() {
   const [filter, setFilter] = useState<"all" | "correct" | "incorrect" | "unanswered">(
     "all"
   );
+  const [overrideMode, setOverrideMode] = useState<string | null>(null);
+
+  async function handleOverrideAnswer(questionId: string, newAnswer: "A" | "B" | "C", index: number) {
+    try {
+      const res = await fetch("/api/questions/answer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId, correctAnswer: newAnswer }),
+      });
+      if (!res.ok) return;
+
+      // Update local state
+      setResult((prev) => {
+        if (!prev) return prev;
+        const updatedQuestions = [...prev.questions];
+        updatedQuestions[index] = { ...updatedQuestions[index], correctAnswer: newAnswer };
+        const updatedAnswers = [...prev.answers];
+        const wasCorrect = updatedAnswers[index].isCorrect;
+        const isNowCorrect = updatedAnswers[index].selected === newAnswer;
+        updatedAnswers[index] = { ...updatedAnswers[index], correct: newAnswer, isCorrect: isNowCorrect };
+
+        const scoreDelta = (isNowCorrect ? 1 : 0) - (wasCorrect ? 1 : 0);
+        const newScore = prev.score + scoreDelta;
+        const newPercentage = Math.round((newScore / prev.totalQuestions) * 100);
+
+        // Recalculate topic breakdown
+        const topicCorrect: Record<string, number> = {};
+        const topicTotal: Record<string, number> = {};
+        updatedQuestions.forEach((q, i) => {
+          topicTotal[q.topic] = (topicTotal[q.topic] || 0) + 1;
+          if (updatedAnswers[i].isCorrect) {
+            topicCorrect[q.topic] = (topicCorrect[q.topic] || 0) + 1;
+          }
+        });
+        const topicBreakdown = Object.keys(topicTotal).map((topic) => ({
+          topic,
+          correct: topicCorrect[topic] || 0,
+          total: topicTotal[topic],
+          percentage: Math.round(((topicCorrect[topic] || 0) / topicTotal[topic]) * 100),
+        }));
+
+        return {
+          ...prev,
+          questions: updatedQuestions,
+          answers: updatedAnswers,
+          score: newScore,
+          percentage: newPercentage,
+          topicBreakdown,
+        };
+      });
+      setOverrideMode(null);
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
     const stored = sessionStorage.getItem("exam_result");
@@ -299,6 +355,46 @@ export default function ExamReviewPage() {
                               ))}
                             </div>
                           )}
+
+                          {/* Override correct answer */}
+                          <div className="mt-3">
+                            {overrideMode === question._id ? (
+                              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">
+                                  Select the correct answer:
+                                </p>
+                                <div className="flex gap-2">
+                                  {(["A", "B", "C"] as const).map((letter) => (
+                                    <button
+                                      key={letter}
+                                      onClick={() => handleOverrideAnswer(question._id, letter, index)}
+                                      className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${
+                                        letter === question.correctAnswer
+                                          ? "bg-emerald-500 text-white"
+                                          : "bg-white border border-amber-300 text-amber-700 hover:bg-amber-100"
+                                      }`}
+                                    >
+                                      {letter}
+                                      {letter === question.correctAnswer && " (current)"}
+                                    </button>
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={() => setOverrideMode(null)}
+                                  className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setOverrideMode(question._id)}
+                                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-amber-600 transition-colors"
+                              >
+                                <FiEdit3 /> Override correct answer
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

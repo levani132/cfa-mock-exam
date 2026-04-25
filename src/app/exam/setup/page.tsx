@@ -170,6 +170,8 @@ export default function ExamSetupPage() {
           showCorrectAnswers: mode === "full" ? false : showAnswers,
         };
 
+    // Clear any previously saved exam state so the new config takes effect
+    localStorage.removeItem("cfa_exam_state");
     // Store config and navigate
     sessionStorage.setItem("exam_config", JSON.stringify(config));
     router.push("/exam/session");

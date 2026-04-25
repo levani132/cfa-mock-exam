@@ -62,7 +62,15 @@ export async function GET(req: NextRequest) {
 
     // Parse exclude list (already-answered question IDs)
     const excludeParam = req.nextUrl.searchParams.get("exclude");
-    const excludeIds = excludeParam ? excludeParam.split(",") : [];
+    const excludeObjectIds: mongoose.Types.ObjectId[] = [];
+    if (excludeParam) {
+      for (const raw of excludeParam.split(",")) {
+        const id = raw.trim();
+        if (id && mongoose.Types.ObjectId.isValid(id)) {
+          excludeObjectIds.push(new mongoose.Types.ObjectId(id));
+        }
+      }
+    }
 
     // Calculate proportional distribution
     const totalWeight = topics.reduce((sum, t) => sum + (TOPIC_WEIGHTS[t] || 0), 0);
@@ -84,8 +92,8 @@ export async function GET(req: NextRequest) {
     const allQuestions: Array<Record<string, unknown>> = [];
     for (const { topic, count } of topicCounts) {
       const matchFilter: Record<string, unknown> = { topic };
-      if (excludeIds.length > 0) {
-        matchFilter._id = { $nin: excludeIds.map((id) => new mongoose.Types.ObjectId(id)) };
+      if (excludeObjectIds.length > 0) {
+        matchFilter._id = { $nin: excludeObjectIds };
       }
       const questions = await Question.aggregate([
         { $match: matchFilter },

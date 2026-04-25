@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
       const count =
         i === topics.length - 1
           ? Math.max(0, totalCount - assigned)
-          : Math.round(proportion * totalCount);
+          : Math.floor(proportion * totalCount);
       topicCounts.push({ topic, count });
       assigned += count;
     });

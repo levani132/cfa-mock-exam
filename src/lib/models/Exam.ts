@@ -2,7 +2,8 @@ import mongoose, { Schema, Document } from "mongoose";
 import type { Topic } from "./Question";
 
 export interface ExamConfig {
-  mode: "full" | "custom";
+  mode: "full" | "custom" | "mock";
+  mockExamId?: string;
   topics: Topic[];
   totalQuestions: number;
   timeLimitMinutes: number;
@@ -12,7 +13,8 @@ export interface ExamConfig {
 
 export interface ExamAnswer {
   questionId: string;
-  selectedAnswer: "A" | "B" | "C" | null;
+  selected: "A" | "B" | "C" | null;
+  correct: "A" | "B" | "C";
   isCorrect: boolean;
   topic: string;
 }
@@ -41,7 +43,8 @@ export interface IExam extends Document {
 const ExamSchema = new Schema<IExam>({
   userId: { type: Number, required: true, index: true },
   config: {
-    mode: { type: String, required: true, enum: ["full", "custom"] },
+    mode: { type: String, required: true, enum: ["full", "custom", "mock"] },
+    mockExamId: { type: String },
     topics: [{ type: String }],
     totalQuestions: { type: Number, required: true },
     timeLimitMinutes: { type: Number, required: true },
@@ -52,7 +55,8 @@ const ExamSchema = new Schema<IExam>({
   answers: [
     {
       questionId: String,
-      selectedAnswer: String,
+      selected: String,
+      correct: String,
       isCorrect: Boolean,
       topic: String,
     },

@@ -37,7 +37,7 @@ interface Question {
 }
 
 interface ExamConfig {
-  mode: "full" | "custom";
+  mode: "full" | "custom" | "mock";
   topics: string[];
   totalQuestions: number;
   timeLimitMinutes: number;
@@ -47,6 +47,11 @@ interface ExamConfig {
 }
 
 const EXAM_STATE_KEY = "cfa_exam_state";
+
+/** Full mock flow: 2 sessions of 90 questions with a break. Applies to "full" and "mock" modes. */
+function isFullMockFlow(config: ExamConfig | null): boolean {
+  return config?.mode === "full" || config?.mode === "mock";
+}
 
 interface SavedExamState {
   config: ExamConfig;
@@ -105,7 +110,7 @@ function getInitialData(): InitialData {
   const stored = sessionStorage.getItem("exam_config");
   if (stored) {
     const config: ExamConfig = JSON.parse(stored);
-    const sessionTime = config.mode === "full" ? 135 * 60 : config.timeLimitMinutes * 60;
+    const sessionTime = isFullMockFlow(config) ? 135 * 60 : config.timeLimitMinutes * 60;
     cachedInitial = { type: "fresh", config, sessionTime };
     return cachedInitial;
   }
@@ -139,22 +144,35 @@ export default function ExamSessionPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const initializedRef = useRef(false);
   const submitCalledRef = useRef(false);
+  const timeLeftRef = useRef(timeLeft);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Persist state to localStorage on every meaningful change
+  // Keep ref in sync
+  useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
+
+  // Persist state to localStorage — throttled to avoid serializing large question arrays every second
   useEffect(() => {
     if (!config || questions.length === 0 || loading) return;
-    saveExamState({
-      config,
-      questions,
-      currentIndex,
-      answers,
-      flagged: Array.from(flagged),
-      revealedAnswers: Array.from(revealedAnswers),
-      timeLeft,
-      session,
-      startedAt: startedAtRef.current.toISOString(),
-    });
-  }, [config, questions, currentIndex, answers, flagged, revealedAnswers, timeLeft, session, loading]);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveExamState({
+        config,
+        questions,
+        currentIndex,
+        answers,
+        flagged: Array.from(flagged),
+        revealedAnswers: Array.from(revealedAnswers),
+        timeLeft: timeLeftRef.current,
+        session,
+        startedAt: startedAtRef.current.toISOString(),
+      });
+    }, 2000);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [config, questions, currentIndex, answers, flagged, revealedAnswers, session, loading]);
 
   // Fetch questions for fresh starts (restored state already has questions)
   useEffect(() => {
@@ -190,7 +208,7 @@ export default function ExamSessionPage() {
       doFetch(url);
     } else {
       const topicsParam = config.topics.join(",");
-      const count = config.mode === "full" ? 180 : config.totalQuestions;
+      const count = isFullMockFlow(config) ? 180 : config.totalQuestions;
       url = `/api/questions?topics=${encodeURIComponent(topicsParam)}&count=${count}`;
 
       // For custom mode, exclude already-answered questions
@@ -221,7 +239,7 @@ export default function ExamSessionPage() {
       if (submitCalledRef.current) return;
 
       // For full mock session 1 — go to break
-      if (config.mode === "full" && session === 1 && !autoSubmit) {
+      if (isFullMockFlow(config) && session === 1 && !autoSubmit) {
         setOnBreak(true);
         setBreakTimeLeft(30 * 60);
         return;
@@ -261,6 +279,7 @@ export default function ExamSessionPage() {
           selected: answers[i] || null,
           correct: q.correctAnswer,
           isCorrect: answers[i] === q.correctAnswer,
+          topic: q.topic,
         })),
         score: correct,
         totalQuestions: questions.length,
@@ -268,7 +287,7 @@ export default function ExamSessionPage() {
         topicBreakdown,
         startedAt: startedAtRef.current.toISOString(),
         completedAt: new Date().toISOString(),
-        timeSpentSeconds: config.timeLimitMinutes * 60 - timeLeft,
+        timeSpentSeconds: config.timeLimitMinutes * 60 - timeLeftRef.current,
       };
 
       try {
@@ -277,6 +296,10 @@ export default function ExamSessionPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(examData),
         });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Server returned ${res.status}`);
+        }
         const data = await res.json();
 
         // Track answered questions for progress
@@ -309,7 +332,7 @@ export default function ExamSessionPage() {
         alert("Failed to save exam. Please try again.");
       }
     },
-    [config, session, questions, answers, timeLeft, router]
+    [config, session, questions, answers, router]
   );
 
   // Timer
@@ -358,7 +381,7 @@ export default function ExamSessionPage() {
   };
 
   const currentSessionQuestions = useCallback(() => {
-    if (!config || config.mode !== "full") return questions;
+    if (!config || !isFullMockFlow(config)) return questions;
     const start = (session - 1) * 90;
     const end = Math.min(start + 90, questions.length);
     return questions.slice(start, end);
@@ -366,7 +389,7 @@ export default function ExamSessionPage() {
 
   const sessionQs = currentSessionQuestions();
   const currentQ = sessionQs[currentIndex];
-  const globalIndex = config?.mode === "full" ? (session - 1) * 90 + currentIndex : currentIndex;
+  const globalIndex = isFullMockFlow(config) ? (session - 1) * 90 + currentIndex : currentIndex;
 
   function selectAnswer(choice: "A" | "B" | "C") {
     setAnswers((prev) => ({ ...prev, [globalIndex]: choice }));
@@ -489,7 +512,7 @@ export default function ExamSessionPage() {
   }
 
   const answeredCount = sessionQs.filter(
-    (_, i) => answers[config?.mode === "full" ? (session - 1) * 90 + i : i] !== undefined
+    (_, i) => answers[isFullMockFlow(config) ? (session - 1) * 90 + i : i] !== undefined
   ).length;
 
   const timerDanger = timeLeft < 300;
@@ -510,7 +533,7 @@ export default function ExamSessionPage() {
               <FiX />
             </button>
 
-            {config?.mode === "full" && (
+            {isFullMockFlow(config) && (
               <span className="bg-white/10 px-3 py-1 rounded-lg text-sm">
                 Session {session}/2
               </span>
@@ -587,7 +610,7 @@ export default function ExamSessionPage() {
             <div className="grid grid-cols-6 gap-2">
               {sessionQs.map((_, i) => {
                 const gi =
-                  config?.mode === "full" ? (session - 1) * 90 + i : i;
+                  isFullMockFlow(config) ? (session - 1) * 90 + i : i;
                 const answered = answers[gi] !== undefined;
                 const isFlagged = flagged.has(gi);
                 const isCurrent = i === currentIndex;
@@ -814,7 +837,7 @@ export default function ExamSessionPage() {
                   onClick={() => setShowConfirmSubmit(true)}
                   className="bg-cfa-gold hover:bg-cfa-gold-light text-cfa-navy font-bold px-6 py-2 rounded-lg transition-colors"
                 >
-                  {config?.mode === "full" && session === 1
+                  {isFullMockFlow(config) && session === 1
                     ? "End Session 1"
                     : "Submit Exam"}
                 </button>
@@ -836,7 +859,7 @@ export default function ExamSessionPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full">
             <h3 className="text-lg font-bold text-cfa-navy mb-2">
-              {config?.mode === "full" && session === 1
+              {isFullMockFlow(config) && session === 1
                 ? "End Session 1?"
                 : "Submit Exam?"}
             </h3>
@@ -863,7 +886,7 @@ export default function ExamSessionPage() {
                 }}
                 className="flex-1 bg-cfa-gold text-cfa-navy py-2.5 rounded-xl font-bold hover:bg-cfa-gold-light"
               >
-                {config?.mode === "full" && session === 1
+                {isFullMockFlow(config) && session === 1
                   ? "Start Break"
                   : "Submit"}
               </button>

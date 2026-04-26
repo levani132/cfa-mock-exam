@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FiArrowLeft,
   FiCheckCircle,
@@ -53,8 +53,23 @@ interface ExamResult {
   }[];
 }
 
-export default function ExamReviewPage() {
+export default function ExamReviewPageWrapper() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="w-10 h-10 border-4 border-cfa-gold border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <ExamReviewPage />
+    </Suspense>
+  );
+}
+
+function ExamReviewPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [result, setResult] = useState<ExamResult | null>(null);
   const [showQuestions, setShowQuestions] = useState(false);
   const [expandedQ, setExpandedQ] = useState<number | null>(null);
@@ -118,13 +133,45 @@ export default function ExamReviewPage() {
   }
 
   useEffect(() => {
+    // Try sessionStorage first (just finished exam)
     const stored = sessionStorage.getItem("exam_result");
-    if (!stored) {
+    if (stored) {
+      setResult(JSON.parse(stored));
+      return;
+    }
+
+    // Fallback: load from API by examId (e.g. from history)
+    const examId = searchParams.get("examId");
+    if (!examId) {
       router.push("/exam/setup");
       return;
     }
-    setResult(JSON.parse(stored));
-  }, [router]);
+
+    fetch(`/api/exam?examId=${examId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.exam) {
+          router.push("/exam/setup");
+          return;
+        }
+        const exam = data.exam;
+        const questions = data.questions || [];
+        setResult({
+          examId: exam._id,
+          config: exam.config,
+          score: exam.score,
+          totalQuestions: exam.totalQuestions,
+          percentage: exam.percentage,
+          topicBreakdown: exam.topicBreakdown,
+          timeSpentSeconds: exam.timeSpentSeconds || 0,
+          questions,
+          answers: exam.answers,
+        });
+      })
+      .catch(() => {
+        router.push("/exam/setup");
+      });
+  }, [router, searchParams]);
 
   if (!result) {
     return (
@@ -224,9 +271,8 @@ export default function ExamReviewPage() {
         </section>
 
         {/* Question Review */}
-        {result.config.showCorrectAnswers && (
-          <section className="mb-8">
-            <button
+        <section className="mb-8">
+          <button
               onClick={() => setShowQuestions(!showQuestions)}
               className="w-full flex items-center justify-between bg-white rounded-xl border border-gray-200 p-4 hover:border-gray-300 transition-colors"
             >
@@ -411,7 +457,6 @@ export default function ExamReviewPage() {
               </div>
             )}
           </section>
-        )}
 
         {/* Actions */}
         <div className="flex gap-4 flex-wrap">

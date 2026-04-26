@@ -113,7 +113,8 @@ export default function HistoryPage() {
                 return (
                   <div
                     key={exam._id}
-                    className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 transition-colors"
+                    onClick={() => router.push(`/exam/review?examId=${exam._id}`)}
+                    className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -126,7 +127,11 @@ export default function HistoryPage() {
                         </span>
                         <div>
                           <span className="text-sm font-medium text-gray-800">
-                            {exam.config.mode === "full" ? "Full Mock" : "Custom"} —{" "}
+                            {exam.config.mode === "full"
+                              ? "Full Mock"
+                              : exam.config.mode === "mock"
+                                ? "Named Mock"
+                                : "Custom"} —{" "}
                             {exam.score}/{exam.totalQuestions}
                           </span>
                           <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">

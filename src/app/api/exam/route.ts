@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Exam } from "@/lib/models/Exam";
+import { Question } from "@/lib/models/Question";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +23,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ examId: exam._id });
-  } catch {
+  } catch (err) {
+    console.error("Failed to save exam:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -34,11 +36,23 @@ export async function GET(req: NextRequest) {
     const examId = req.nextUrl.searchParams.get("examId");
 
     if (examId) {
-      const exam = await Exam.findById(examId);
+      const exam = await Exam.findById(examId).lean();
       if (!exam) {
         return NextResponse.json({ error: "Exam not found" }, { status: 404 });
       }
-      return NextResponse.json({ exam });
+
+      // Fetch full question content for review
+      const questions = await Question.find({
+        _id: { $in: exam.questionIds },
+      }).lean();
+
+      // Maintain original order
+      const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
+      const orderedQuestions = exam.questionIds
+        .map((id: string) => questionMap.get(id.toString()))
+        .filter(Boolean);
+
+      return NextResponse.json({ exam, questions: orderedQuestions });
     }
 
     if (!userId) {

@@ -32,6 +32,7 @@ interface Question {
   correctAnswer: "A" | "B" | "C";
   topic: string;
   explanation?: string;
+  source?: string;
   images?: QuestionImage[];
 }
 
@@ -733,10 +734,17 @@ export default function ExamSessionPage() {
             )}
 
             {/* Explanation (when revealed) */}
-            {revealedAnswers.has(globalIndex) && currentQ.explanation && (
+            {revealedAnswers.has(globalIndex) && (currentQ.explanation || currentQ.source) && (
               <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-5">
-                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Explanation</p>
-                <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{currentQ.explanation}</p>
+                {currentQ.explanation && (
+                  <>
+                    <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Explanation</p>
+                    <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{currentQ.explanation}</p>
+                  </>
+                )}
+                {currentQ.source && (
+                  <p className={`text-xs text-blue-500 italic${currentQ.explanation ? " mt-2" : ""}`}>Source: {currentQ.source}</p>
+                )}
                 {currentQ.images?.filter((img) => img.location === "explanation").map((img, i) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img

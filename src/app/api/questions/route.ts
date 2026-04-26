@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
           topic: q.topic,
           explanation: q.explanation,
           images: q.images,
+          source: q.source,
         })),
         mockExamName: mock.name,
       });
@@ -120,6 +121,7 @@ export async function GET(req: NextRequest) {
         topic: q.topic,
         explanation: q.explanation,
         images: q.images,
+        source: q.source,
       })),
       topicDistribution: topicCounts,
     });

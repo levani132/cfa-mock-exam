@@ -38,6 +38,7 @@ interface ExamResult {
     correctAnswer: "A" | "B" | "C";
     topic: string;
     explanation?: string;
+    source?: string;
     images?: {
       data: string;
       contentType: string;
@@ -341,10 +342,17 @@ export default function ExamReviewPage() {
                               </div>
                             );
                           })}
-                          {question.explanation && (
+                          {(question.explanation || question.source) && (
                             <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-                              <strong>Explanation:</strong>{" "}
-                              {question.explanation}
+                              {question.explanation && (
+                                <>
+                                  <strong>Explanation:</strong>{" "}
+                                  {question.explanation}
+                                </>
+                              )}
+                              {question.source && (
+                                <p className={`text-xs text-blue-500 italic${question.explanation ? " mt-2" : ""}`}>Source: {question.source}</p>
+                              )}
                               {question.images?.filter((img) => img.location === "explanation").map((img, i) => (
                                 <img
                                   key={`e-img-${i}`}

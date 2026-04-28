@@ -66,6 +66,9 @@ export async function GET(
         numericId: user.numericId,
         name: user.name,
         createdAt: user.createdAt,
+        profilePicture: user.profilePicture || null,
+        coverPicture: user.coverPicture || null,
+        description: user.description || null,
       },
       stats: {
         totalExams,

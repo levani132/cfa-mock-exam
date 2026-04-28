@@ -7,6 +7,9 @@ export interface IUser extends Document {
   answeredQuestions: string[];
   completedCycles: number;
   createdAt: Date;
+  profilePicture?: string; // URL or base64
+  coverPicture?: string; // URL or base64
+  description?: string; // Bio/description
 }
 
 const UserSchema = new Schema<IUser>({
@@ -16,6 +19,9 @@ const UserSchema = new Schema<IUser>({
   answeredQuestions: { type: [String], default: [] },
   completedCycles: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
+  profilePicture: { type: String },
+  coverPicture: { type: String },
+  description: { type: String, maxlength: 500 },
 });
 
 export const User = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

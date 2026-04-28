@@ -32,6 +32,9 @@ interface UserProfile {
     numericId: number;
     name: string;
     createdAt: string;
+    profilePicture?: string | null;
+    coverPicture?: string | null;
+    description?: string | null;
   };
   stats: UserStats;
 }
@@ -132,19 +135,39 @@ export default function UserProfilePage() {
         <aside className="w-full lg:w-80 shrink-0 space-y-5 lg:sticky lg:top-24">
           {/* Avatar card */}
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            {/* Banner */}
-            <div className="h-24 bg-linear-to-r from-cfa-navy to-cfa-navy-light" />
+            {/* Cover Banner */}
+            <div
+              className="h-24 bg-linear-to-r from-cfa-navy to-cfa-navy-light bg-cover bg-center"
+              style={
+                user.coverPicture
+                  ? { backgroundImage: `url('${user.coverPicture}')` }
+                  : {}
+              }
+            />
             <div className="px-6 pb-6">
-              {/* Avatar */}
+              {/* Profile Picture */}
               <div className="-mt-10 mb-4">
-                <div className="h-20 w-20 rounded-full bg-cfa-navy border-4 border-white flex items-center justify-center shadow-md">
-                  <span className="text-white font-bold text-2xl">
-                    {getInitials(user.name)}
-                  </span>
-                </div>
+                {user.profilePicture ? (
+                  <img
+                    src={user.profilePicture}
+                    alt={user.name}
+                    className="h-20 w-20 rounded-full border-4 border-white shadow-md object-cover"
+                  />
+                ) : (
+                  <div className="h-20 w-20 rounded-full bg-cfa-navy border-4 border-white flex items-center justify-center shadow-md">
+                    <span className="text-white font-bold text-2xl">
+                      {getInitials(user.name)}
+                    </span>
+                  </div>
+                )}
               </div>
               <h2 className="text-xl font-bold text-gray-900">{user.name}</h2>
-              <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+              {user.description && (
+                <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+                  {user.description}
+                </p>
+              )}
+              <p className="text-sm text-gray-500 flex items-center gap-1 mt-2">
                 <FiCalendar className="h-3.5 w-3.5" />
                 Member since{" "}
                 {new Date(user.createdAt).toLocaleDateString("en-US", {

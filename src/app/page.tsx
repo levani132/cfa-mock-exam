@@ -23,30 +23,41 @@ export default function HomePage() {
       {/* Header */}
       <header className="bg-cfa-navy text-white shadow-lg">
         <div className="max-w-6xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between gap-6 mb-4">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            {/* Logo */}
+            <div className="flex items-center gap-3 shrink-0">
               <div className="w-10 h-10 bg-cfa-gold rounded-lg flex items-center justify-center font-bold text-cfa-navy text-lg">
                 CFA
               </div>
-              <span className="text-lg font-semibold">Level 1 Mock Exam</span>
+              <span className="text-lg font-semibold hidden sm:inline">Level 1 Mock Exam</span>
             </div>
-            {userId && (
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-300">
-                  Welcome, <span className="text-cfa-gold font-medium">{userName}</span>
-                </span>
+            {/* Search — centered flex-grow */}
+            <div className="flex-1 max-w-md mx-auto">
+              <UserSearchBar />
+            </div>
+            {/* User actions */}
+            <div className="flex items-center gap-4 shrink-0">
+              {userId ? (
+                <>
+                  <span className="text-sm text-gray-300 hidden md:inline">
+                    Welcome, <span className="text-cfa-gold font-medium">{userName}</span>
+                  </span>
+                  <button
+                    onClick={() => router.push("/history")}
+                    className="text-sm px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors whitespace-nowrap"
+                  >
+                    My History
+                  </button>
+                </>
+              ) : (
                 <button
-                  onClick={() => router.push("/history")}
+                  onClick={() => router.push("/login")}
                   className="text-sm px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
                 >
-                  My History
+                  Log In
                 </button>
-              </div>
-            )}
-          </div>
-          {/* Search Bar */}
-          <div className="w-full max-w-md">
-            <UserSearchBar />
+              )}
+            </div>
           </div>
         </div>
       </header>

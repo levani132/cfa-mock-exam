@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   FiArrowLeft,
@@ -8,16 +8,17 @@ import {
   FiBook,
   FiCheckCircle,
   FiCalendar,
-  FiMessageCircle,
-  FiHeart,
-  FiTrash2,
+  FiTarget,
+  FiTrendingUp,
 } from "react-icons/fi";
+import PostsFeed from "@/components/PostsFeed";
 
 interface UserStats {
   totalExams: number;
   totalQuestions: number;
   correctAnswers: number;
   averageScore: number;
+  totalQuestionsInDB: number;
   topicBreakdown: Array<{
     topic: string;
     correct: number;
@@ -35,14 +36,25 @@ interface UserProfile {
   stats: UserStats;
 }
 
-interface Post {
-  _id: string;
-  userId: number;
-  userName: string;
-  content: string;
-  likes: number;
-  likedBy: number[];
-  createdAt: string;
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function getScoreColor(pct: number) {
+  if (pct >= 70) return "text-emerald-600";
+  if (pct >= 50) return "text-amber-600";
+  return "text-red-500";
+}
+
+function getBarColor(pct: number) {
+  if (pct >= 70) return "from-emerald-400 to-emerald-600";
+  if (pct >= 50) return "from-amber-400 to-amber-600";
+  return "from-red-400 to-red-500";
 }
 
 export default function UserProfilePage() {
@@ -51,115 +63,26 @@ export default function UserProfilePage() {
   const userId = params.userId;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
+
+  const currentUserId = useMemo(
+    () => (typeof window !== "undefined" ? localStorage.getItem("cfa_user_id") : null),
+    []
+  );
 
   useEffect(() => {
-    const stored = localStorage.getItem("cfa_user_id");
-    setCurrentUserId(stored);
-
-    const fetchData = async () => {
-      try {
-        const [profileRes, postsRes] = await Promise.all([
-          fetch(`/api/users/${userId}`),
-          fetch(`/api/posts?userId=${userId}`),
-        ]);
-
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
-          setProfile(profileData);
-        }
-
-        if (postsRes.ok) {
-          const postsData = await postsRes.json();
-          setPosts(postsData);
-
-          // Determine which posts are liked by current user
-          if (stored) {
-            const currentUserIdNum = parseInt(stored, 10);
-            const liked = new Set<string>(
-              postsData
-                .filter((post: Post) => post.likedBy.includes(currentUserIdNum))
-                .map((post: Post) => post._id)
-            );
-            setLikedPosts(liked);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch profile:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    fetch(`/api/users/${userId}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((data: UserProfile) => setProfile(data))
+      .catch((err) => console.error("Failed to fetch profile:", err))
+      .finally(() => setLoading(false));
   }, [userId]);
-
-  const handleLike = async (postId: string) => {
-    if (!currentUserId) {
-      alert("Please log in to like posts");
-      return;
-    }
-
-    try {
-      const isLiked = likedPosts.has(postId);
-      const res = await fetch(`/api/posts/${postId}/like`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: currentUserId,
-          action: isLiked ? "unlike" : "like",
-        }),
-      });
-
-      if (res.ok) {
-        const updatedPost = await res.json();
-        setPosts((prev) =>
-          prev.map((p) => (p._id === postId ? updatedPost : p))
-        );
-
-        setLikedPosts((prev) => {
-          const newSet = new Set(prev);
-          if (isLiked) {
-            newSet.delete(postId);
-          } else {
-            newSet.add(postId);
-          }
-          return newSet;
-        });
-      }
-    } catch (err) {
-      console.error("Failed to like post:", err);
-    }
-  };
-
-  const handleDeletePost = async (postId: string) => {
-    if (!confirm("Delete this post?")) return;
-
-    try {
-      const res = await fetch(`/api/posts/${postId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId }),
-      });
-
-      if (res.ok) {
-        setPosts((prev) => prev.filter((p) => p._id !== postId));
-      } else {
-        alert("Failed to delete post");
-      }
-    } catch (err) {
-      console.error("Failed to delete post:", err);
-    }
-  };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cfa-navy mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cfa-navy mx-auto mb-4" />
           <p className="text-gray-600">Loading profile...</p>
         </div>
       </div>
@@ -170,7 +93,6 @@ export default function UserProfilePage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <FiArrowLeft className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 mb-4">User not found</p>
           <button
             onClick={() => router.back()}
@@ -184,199 +106,183 @@ export default function UserProfilePage() {
   }
 
   const { user, stats } = profile;
+  const progressPct =
+    stats.totalQuestionsInDB > 0
+      ? Math.round((stats.totalQuestions / stats.totalQuestionsInDB) * 100)
+      : 0;
+  const isOwn = currentUserId === String(user.numericId);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-cfa-navy text-white shadow-lg">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
+      {/* Top bar */}
+      <header className="bg-cfa-navy text-white shadow-lg sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
           <button
             onClick={() => router.back()}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
           >
-            <FiArrowLeft className="h-6 w-6" />
+            <FiArrowLeft className="h-5 w-5" />
           </button>
-          <div>
-            <h1 className="text-xl font-bold">{user.name}</h1>
-            <p className="text-sm text-gray-300">
-              Member since{" "}
-              {new Date(user.createdAt).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "short",
-              })}
-            </p>
-          </div>
+          <span className="font-semibold text-lg">{user.name}&apos;s Profile</span>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          {/* Total Exams */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-cfa-navy">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm font-medium">Exams Taken</p>
-                <p className="text-3xl font-bold text-cfa-navy mt-2">
-                  {stats.totalExams}
-                </p>
+      <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8 items-start">
+        {/* ── LEFT SIDEBAR ── */}
+        <aside className="w-full lg:w-80 shrink-0 space-y-5 lg:sticky lg:top-24">
+          {/* Avatar card */}
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            {/* Banner */}
+            <div className="h-24 bg-linear-to-r from-cfa-navy to-cfa-navy-light" />
+            <div className="px-6 pb-6">
+              {/* Avatar */}
+              <div className="-mt-10 mb-4">
+                <div className="h-20 w-20 rounded-full bg-cfa-navy border-4 border-white flex items-center justify-center shadow-md">
+                  <span className="text-white font-bold text-2xl">
+                    {getInitials(user.name)}
+                  </span>
+                </div>
               </div>
-              <FiBook className="h-10 w-10 text-cfa-navy/20" />
+              <h2 className="text-xl font-bold text-gray-900">{user.name}</h2>
+              <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                <FiCalendar className="h-3.5 w-3.5" />
+                Member since{" "}
+                {new Date(user.createdAt).toLocaleDateString("en-US", {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+              {isOwn && (
+                <span className="inline-block mt-3 text-xs bg-cfa-navy/10 text-cfa-navy font-semibold px-3 py-1 rounded-full">
+                  Your Profile
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Average Score */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-emerald-500">
-            <div className="flex items-center justify-between">
+          {/* Quick stats */}
+          <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Stats
+            </h3>
+
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-cfa-navy/10 rounded-lg">
+                <FiBook className="h-5 w-5 text-cfa-navy" />
+              </div>
               <div>
-                <p className="text-gray-500 text-sm font-medium">
-                  Average Score
-                </p>
-                <p className="text-3xl font-bold text-emerald-600 mt-2">
+                <p className="text-xs text-gray-500">Exams taken</p>
+                <p className="text-xl font-bold text-gray-900">{stats.totalExams}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-50 rounded-lg">
+                <FiAward className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Average score</p>
+                <p className={`text-xl font-bold ${getScoreColor(stats.averageScore)}`}>
                   {stats.averageScore}%
                 </p>
               </div>
-              <FiAward className="h-10 w-10 text-emerald-500/20" />
             </div>
-          </div>
 
-          {/* Correct Answers */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <FiCheckCircle className="h-5 w-5 text-blue-600" />
+              </div>
               <div>
-                <p className="text-gray-500 text-sm font-medium">
-                  Correct Answers
-                </p>
-                <p className="text-3xl font-bold text-blue-600 mt-2">
-                  {stats.correctAnswers}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  of {stats.totalQuestions}
+                <p className="text-xs text-gray-500">Correct answers</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {stats.correctAnswers.toLocaleString()}{" "}
+                  <span className="text-sm font-normal text-gray-400">
+                    / {stats.totalQuestions.toLocaleString()}
+                  </span>
                 </p>
               </div>
-              <FiCheckCircle className="h-10 w-10 text-blue-500/20" />
             </div>
           </div>
 
-          {/* Member Since */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-amber-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm font-medium">Member Since</p>
-                <p className="text-lg font-bold text-amber-600 mt-2">
-                  {new Date(user.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </p>
+          {/* Overall question bank progress */}
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 bg-purple-50 rounded-lg">
+                <FiTarget className="h-5 w-5 text-purple-600" />
               </div>
-              <FiCalendar className="h-10 w-10 text-amber-500/20" />
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Question Bank Progress
+              </h3>
             </div>
-          </div>
-        </div>
 
-        {/* Topic Breakdown */}
-        {stats.topicBreakdown.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
-            <h2 className="text-lg font-bold text-cfa-navy mb-6">
-              Topic Performance
-            </h2>
-            <div className="space-y-4">
-              {stats.topicBreakdown.map((topic) => (
-                <div key={topic.topic}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-gray-700">
-                      {topic.topic}
-                    </span>
-                    <span className="text-sm font-semibold text-cfa-navy">
-                      {topic.correct}/{topic.total} ({topic.percentage}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-linear-to-r from-cfa-navy to-cfa-navy-light h-2 rounded-full transition-all"
-                      style={{ width: `${topic.percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* User Posts */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <FiMessageCircle className="h-6 w-6 text-cfa-navy" />
-            <h2 className="text-lg font-bold text-cfa-navy">Posts</h2>
-            {posts.length > 0 && (
-              <span className="ml-auto text-sm text-gray-500">
-                {posts.length} post{posts.length !== 1 ? "s" : ""}
+            <div className="flex items-end justify-between mb-2">
+              <span className="text-3xl font-bold text-gray-900">
+                {progressPct}
+                <span className="text-base font-normal text-gray-400">%</span>
               </span>
-            )}
-          </div>
+              <span className="text-sm text-gray-500 text-right">
+                {stats.totalQuestions.toLocaleString()}
+                <span className="block text-xs text-gray-400">
+                  of {stats.totalQuestionsInDB.toLocaleString()} Qs
+                </span>
+              </span>
+            </div>
 
-          {posts.length === 0 ? (
-            <p className="text-center text-gray-400 py-8">
-              This user hasn't posted yet
+            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+              <div
+                className="h-3 rounded-full bg-linear-to-r from-purple-500 to-purple-700 transition-all duration-500"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+              Questions attempted from the entire question bank
             </p>
-          ) : (
-            <div className="space-y-4">
-              {posts.map((post) => (
-                <div
-                  key={post._id}
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-cfa-navy">
-                        {post.userName}
-                      </h3>
-                      <p className="text-xs text-gray-400">
-                        {new Date(post.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
+          </div>
+        </aside>
+
+        {/* ── RIGHT MAIN ── */}
+        <main className="flex-1 min-w-0 space-y-6">
+          {/* Topic breakdown */}
+          {stats.topicBreakdown.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <FiTrendingUp className="h-5 w-5 text-cfa-navy" />
+                <h2 className="text-base font-bold text-gray-900">Topic Performance</h2>
+              </div>
+              <div className="space-y-4">
+                {stats.topicBreakdown.map((topic) => (
+                  <div key={topic.topic}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-medium text-gray-700">
+                        {topic.topic}
+                      </span>
+                      <span className={`text-sm font-semibold tabular-nums ${getScoreColor(topic.percentage)}`}>
+                        {topic.correct}/{topic.total}
+                        <span className="ml-1 font-normal text-gray-400">
+                          ({topic.percentage}%)
+                        </span>
+                      </span>
                     </div>
-                    {parseInt(currentUserId || "0") === post.userId && (
-                      <button
-                        onClick={() => handleDeletePost(post._id)}
-                        className="p-2 hover:bg-red-50 rounded-lg text-red-500 transition-colors"
-                      >
-                        <FiTrash2 className="h-4 w-4" />
-                      </button>
-                    )}
+                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className={`h-2 rounded-full bg-linear-to-r ${getBarColor(topic.percentage)} transition-all duration-500`}
+                        style={{ width: `${topic.percentage}%` }}
+                      />
+                    </div>
                   </div>
-
-                  <p className="text-gray-700 mb-4 whitespace-pre-wrap">
-                    {post.content}
-                  </p>
-
-                  <button
-                    onClick={() => handleLike(post._id)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
-                      likedPosts.has(post._id)
-                        ? "bg-red-50 text-red-500"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    <FiHeart
-                      className={`h-4 w-4 ${
-                        likedPosts.has(post._id) ? "fill-current" : ""
-                      }`}
-                    />
-                    <span className="text-sm font-medium">{post.likes}</span>
-                  </button>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
-        </div>
-      </main>
+
+          {/* Posts wall — reuses PostsFeed so comments work too */}
+          <div className="bg-white rounded-2xl shadow-sm p-6">
+            <h2 className="text-base font-bold text-gray-900 mb-6">Posts</h2>
+            <PostsFeed userId={user.numericId} />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
+

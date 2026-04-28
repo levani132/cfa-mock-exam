@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { User } from "@/lib/models/User";
 import { Exam } from "@/lib/models/Exam";
+import { Question } from "@/lib/models/Question";
 import type { TopicScore } from "@/lib/models/Exam";
 
 export async function GET(
@@ -21,7 +22,10 @@ export async function GET(
     }
 
     // Get exams and stats
-    const exams = await Exam.find({ userId }).lean();
+    const [exams, totalQuestionsInDB] = await Promise.all([
+      Exam.find({ userId }).lean(),
+      Question.countDocuments(),
+    ]);
 
     let totalExams = exams.length;
     let averageScore = 0;
@@ -69,6 +73,7 @@ export async function GET(
         correctAnswers,
         averageScore,
         topicBreakdown,
+        totalQuestionsInDB,
       },
     });
   } catch (err) {

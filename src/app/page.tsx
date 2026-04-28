@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { FiBookOpen, FiClock, FiAward, FiArrowRight, FiHeart } from "react-icons/fi";
+import UserSearchBar from "@/components/UserSearchBar";
+import PostsFeed from "@/components/PostsFeed";
 
 export default function HomePage() {
   const router = useRouter();
@@ -20,32 +22,38 @@ export default function HomePage() {
     <div className="min-h-screen flex flex-col">
       {/* Header */}
       <header className="bg-cfa-navy text-white shadow-lg">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-cfa-gold rounded-lg flex items-center justify-center font-bold text-cfa-navy text-lg">
-              CFA
+        <div className="max-w-6xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between gap-6 mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-cfa-gold rounded-lg flex items-center justify-center font-bold text-cfa-navy text-lg">
+                CFA
+              </div>
+              <span className="text-lg font-semibold">Level 1 Mock Exam</span>
             </div>
-            <span className="text-lg font-semibold">Level 1 Mock Exam</span>
+            {userId && (
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-300">
+                  Welcome, <span className="text-cfa-gold font-medium">{userName}</span>
+                </span>
+                <button
+                  onClick={() => router.push("/history")}
+                  className="text-sm px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  My History
+                </button>
+              </div>
+            )}
           </div>
-          {userId && (
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-300">
-                Welcome, <span className="text-cfa-gold font-medium">{userName}</span>
-              </span>
-              <button
-                onClick={() => router.push("/history")}
-                className="text-sm px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
-              >
-                My History
-              </button>
-            </div>
-          )}
+          {/* Search Bar */}
+          <div className="w-full max-w-md">
+            <UserSearchBar />
+          </div>
         </div>
       </header>
 
       {/* Hero */}
       <main className="flex-1">
-        <section className="bg-gradient-to-br from-cfa-navy via-cfa-navy-light to-cfa-navy text-white py-20">
+        <section className="bg-linear-to-br from-cfa-navy via-cfa-navy-light to-cfa-navy text-white py-20">
           <div className="max-w-4xl mx-auto px-6 text-center">
             <div className="mb-6">
               <span className="inline-block bg-cfa-gold/20 text-cfa-gold px-4 py-1.5 rounded-full text-sm font-medium border border-cfa-gold/30">
@@ -147,7 +155,7 @@ export default function HomePage() {
         {/* Dedication */}
         <section className="py-12 bg-white">
           <div className="max-w-xl mx-auto px-6 text-center">
-            <div className="bg-gradient-to-r from-cfa-navy to-cfa-navy-light rounded-2xl p-8 text-white">
+            <div className="bg-linear-to-r from-cfa-navy to-cfa-navy-light rounded-2xl p-8 text-white">
               <FiHeart className="text-cfa-gold text-3xl mx-auto mb-4" />
               <p className="text-lg italic mb-2">
                 &ldquo;Behind every successful CFA candidate is someone who never stopped believing in them.&rdquo;
@@ -156,6 +164,19 @@ export default function HomePage() {
                 For Ana — you&apos;re going to crush this exam! 🌟
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Community Wall */}
+        <section className="py-16 bg-gray-50">
+          <div className="max-w-4xl mx-auto px-6">
+            <h2 className="text-2xl font-bold text-cfa-navy mb-2">
+              Community Wall
+            </h2>
+            <p className="text-gray-600 mb-8">
+              Share your study journey, tips, and encouragement with fellow CFA candidates
+            </p>
+            <PostsFeed />
           </div>
         </section>
       </main>

@@ -227,7 +227,7 @@ export default function UserProfilePage() {
         {/* ── LEFT SIDEBAR ── */}
         <aside className="w-full lg:w-80 shrink-0 space-y-5 lg:sticky lg:top-24">
           {/* Avatar card */}
-          <div className="bg-white rounded-2xl shadow-sm">
+          <div className="bg-white rounded-2xl shadow-sm overflow-visible">
             {/* Cover Banner with Edit Button */}
             <div className="relative overflow-hidden rounded-t-2xl">
               <div
@@ -247,7 +247,7 @@ export default function UserProfilePage() {
                 </button>
               )}
             </div>
-            <div className="px-6 pt-2 pb-6">
+            <div className="px-6 pt-1 pb-6 relative z-10">
               {/* Profile Picture */}
               <div className="-mt-10 mb-4">
                 {user.profilePicture ? (

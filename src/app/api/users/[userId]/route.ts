@@ -84,3 +84,49 @@ export async function GET(
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ userId: string }> }
+) {
+  try {
+    await connectDB();
+
+    const { userId: userIdStr } = await params;
+    const userId = parseInt(userIdStr, 10);
+    const { profilePicture, coverPicture, description } = await req.json();
+
+    // Verify user exists
+    const user = await User.findOne({ numericId: userId });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Update fields
+    if (profilePicture !== undefined) {
+      user.profilePicture = profilePicture;
+    }
+    if (coverPicture !== undefined) {
+      user.coverPicture = coverPicture;
+    }
+    if (description !== undefined) {
+      user.description = description?.slice(0, 500) || ""; // Max 500 chars
+    }
+
+    await user.save();
+
+    return NextResponse.json({
+      user: {
+        numericId: user.numericId,
+        name: user.name,
+        createdAt: user.createdAt,
+        profilePicture: user.profilePicture || null,
+        coverPicture: user.coverPicture || null,
+        description: user.description || null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to update user profile:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}

@@ -10,6 +10,9 @@ import {
   FiCalendar,
   FiTarget,
   FiTrendingUp,
+  FiEdit2,
+  FiX,
+  FiLoader,
 } from "react-icons/fi";
 import PostsFeed from "@/components/PostsFeed";
 
@@ -67,6 +70,13 @@ export default function UserProfilePage() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    profilePicture: "",
+    coverPicture: "",
+    description: "",
+  });
 
   const currentUserId = useMemo(
     () => (typeof window !== "undefined" ? localStorage.getItem("cfa_user_id") : null),
@@ -76,10 +86,93 @@ export default function UserProfilePage() {
   useEffect(() => {
     fetch(`/api/users/${userId}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
-      .then((data: UserProfile) => setProfile(data))
+      .then((data: UserProfile) => {
+        setProfile(data);
+        setEditForm({
+          profilePicture: data.user.profilePicture || "",
+          coverPicture: data.user.coverPicture || "",
+          description: data.user.description || "",
+        });
+      })
       .catch((err) => console.error("Failed to fetch profile:", err))
       .finally(() => setLoading(false));
   }, [userId]);
+
+  const handleFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: "profilePicture" | "coverPicture"
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const base64 = await handleFileToBase64(file);
+        setEditForm((prev) => ({ ...prev, [field]: base64 }));
+      } catch (err) {
+        console.error("Failed to convert image:", err);
+      }
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!profile) return;
+
+    try {
+      setIsSaving(true);
+      const res = await fetch(`/api/users/${user.numericId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profilePicture: editForm.profilePicture || null,
+          coverPicture: editForm.coverPicture || null,
+          description: editForm.description,
+        }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                user: {
+                  ...prev.user,
+                  profilePicture: updated.user.profilePicture,
+                  coverPicture: updated.user.coverPicture,
+                  description: updated.user.description,
+                },
+              }
+            : null
+        );
+        setIsEditing(false);
+      } else {
+        alert("Failed to update profile");
+      }
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      alert("Error saving profile");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEditCancel = () => {
+    if (!profile) return;
+    setEditForm({
+      profilePicture: profile.user.profilePicture || "",
+      coverPicture: profile.user.coverPicture || "",
+      description: profile.user.description || "",
+    });
+    setIsEditing(false);
+  };
 
   if (loading) {
     return (
@@ -135,15 +228,25 @@ export default function UserProfilePage() {
         <aside className="w-full lg:w-80 shrink-0 space-y-5 lg:sticky lg:top-24">
           {/* Avatar card */}
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            {/* Cover Banner */}
-            <div
-              className="h-24 bg-linear-to-r from-cfa-navy to-cfa-navy-light bg-cover bg-center"
-              style={
-                user.coverPicture
-                  ? { backgroundImage: `url('${user.coverPicture}')` }
-                  : {}
-              }
-            />
+            {/* Cover Banner with Edit Button */}
+            <div className="relative">
+              <div
+                className="h-24 bg-linear-to-r from-cfa-navy to-cfa-navy-light bg-cover bg-center"
+                style={
+                  user.coverPicture
+                    ? { backgroundImage: `url('${user.coverPicture}')` }
+                    : {}
+                }
+              />
+              {isOwn && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="absolute top-2 right-2 p-2 bg-white/90 hover:bg-white rounded-lg shadow-md transition-colors"
+                >
+                  <FiEdit2 className="h-4 w-4 text-cfa-navy" />
+                </button>
+              )}
+            </div>
             <div className="px-6 pb-6">
               {/* Profile Picture */}
               <div className="-mt-10 mb-4">
@@ -305,6 +408,129 @@ export default function UserProfilePage() {
           </div>
         </main>
       </div>
+
+      {/* Edit Profile Modal */}
+      {isEditing && isOwn && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
+              <h3 className="text-lg font-bold text-gray-900">Edit Profile</h3>
+              <button
+                onClick={handleEditCancel}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <FiX className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="p-6 space-y-5">
+              {/* Cover Picture Upload */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Cover Picture
+                </label>
+                <div className="relative">
+                  {editForm.coverPicture && (
+                    <div className="mb-2 h-24 rounded-lg overflow-hidden">
+                      <img
+                        src={editForm.coverPicture}
+                        alt="Cover preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageChange(e, "coverPicture")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-cfa-navy focus:ring-2 focus:ring-cfa-navy/10 outline-none transition-all"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {editForm.coverPicture ? "Click to change" : "Select an image"}
+                </p>
+              </div>
+
+              {/* Profile Picture Upload */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Profile Picture
+                </label>
+                <div className="relative">
+                  {editForm.profilePicture && (
+                    <div className="mb-2 h-24 w-24 rounded-full overflow-hidden mx-auto">
+                      <img
+                        src={editForm.profilePicture}
+                        alt="Profile preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageChange(e, "profilePicture")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-cfa-navy focus:ring-2 focus:ring-cfa-navy/10 outline-none transition-all"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {editForm.profilePicture ? "Click to change" : "Select an image"}
+                </p>
+              </div>
+
+              {/* Bio/Description */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Bio
+                </label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      description: e.target.value.slice(0, 500),
+                    }))
+                  }
+                  placeholder="Tell us about yourself... (max 500 characters)"
+                  maxLength={500}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-cfa-navy focus:ring-2 focus:ring-cfa-navy/10 outline-none transition-all resize-none"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  {editForm.description.length}/500
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={handleEditCancel}
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                disabled={isSaving}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-cfa-navy text-white rounded-lg hover:bg-cfa-navy-light font-medium transition-colors disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <>
+                    <FiLoader className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,15 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { User } from "@/lib/models/User";
 import { Exam } from "@/lib/models/Exam";
+import type { TopicScore } from "@/lib/models/Exam";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     await connectDB();
 
-    const userId = parseInt(params.userId, 10);
+    const { userId: userIdStr } = await params;
+    const userId = parseInt(userIdStr, 10);
 
     const user = await User.findOne({ numericId: userId }).lean();
 
@@ -32,7 +34,7 @@ export async function GET(
       totalQuestions += exam.totalQuestions;
       correctAnswers += exam.score;
 
-      exam.topicBreakdown.forEach((topic) => {
+      exam.topicBreakdown.forEach((topic: TopicScore) => {
         if (!topicStats[topic.topic]) {
           topicStats[topic.topic] = { correct: 0, total: 0 };
         }

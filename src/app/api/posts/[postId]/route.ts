@@ -4,12 +4,13 @@ import { Post } from "@/lib/models/Post";
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { postId: string } }
+  { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
     await connectDB();
     const body = await req.json();
     const { userId } = body;
+    const { postId } = await params;
 
     if (!userId) {
       return NextResponse.json(
@@ -18,7 +19,7 @@ export async function DELETE(
       );
     }
 
-    const post = await Post.findById(params.postId);
+    const post = await Post.findById(postId);
     if (!post) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
@@ -31,7 +32,7 @@ export async function DELETE(
       );
     }
 
-    await Post.findByIdAndDelete(params.postId);
+    await Post.findByIdAndDelete(postId);
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("Failed to delete post:", err);

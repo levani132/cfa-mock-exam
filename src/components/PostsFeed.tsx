@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   FiMessageCircle,
@@ -30,49 +30,37 @@ export default function PostsFeed({ userId }: PostsFeedProps) {
   const [newPost, setNewPost] = useState("");
   const [isPosting, setIsPosting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
+  const currentUserId = useMemo(
+    () => (typeof window !== "undefined" ? localStorage.getItem("cfa_user_id") : null),
+    []
+  );
+  const currentUserName = useMemo(
+    () => (typeof window !== "undefined" ? localStorage.getItem("cfa_user_name") : null),
+    []
+  );
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    const stored = localStorage.getItem("cfa_user_id");
-    const storedName = localStorage.getItem("cfa_user_name");
-    setCurrentUserId(stored);
-    setCurrentUserName(storedName);
-
-    loadPosts();
-  }, [userId]);
-
-  const loadPosts = async () => {
-    try {
-      setLoading(true);
-      const url = userId
-        ? `/api/posts?userId=${userId}`
-        : `/api/posts`;
-
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
+  const loadPosts = useCallback(() => {
+    const url = userId ? `/api/posts?userId=${userId}` : `/api/posts`;
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then((data: Post[]) => {
         setPosts(data);
-
-        // Determine which posts are liked by current user
         const stored = localStorage.getItem("cfa_user_id");
         if (stored) {
-          const currentUserIdNum = parseInt(stored, 10);
-          const liked = new Set(
-            data
-              .filter((post: Post) => post.likedBy.includes(currentUserIdNum))
-              .map((post: Post) => post._id)
+          const uid = parseInt(stored, 10);
+          setLikedPosts(
+            new Set<string>(data.filter((p) => p.likedBy.includes(uid)).map((p) => p._id))
           );
-          setLikedPosts(liked);
         }
-      }
-    } catch (err) {
-      console.error("Failed to load posts:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      })
+      .catch((err) => console.error("Failed to load posts:", err))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
 
   const handlePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

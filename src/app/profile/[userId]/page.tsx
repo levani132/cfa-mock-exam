@@ -46,9 +46,9 @@ interface Post {
 }
 
 export default function UserProfilePage() {
-  const params = useParams();
+  const params = useParams<{ userId: string }>();
   const router = useRouter();
-  const userId = params.userId as string;
+  const userId = params.userId;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -79,7 +79,7 @@ export default function UserProfilePage() {
           // Determine which posts are liked by current user
           if (stored) {
             const currentUserIdNum = parseInt(stored, 10);
-            const liked = new Set(
+            const liked = new Set<string>(
               postsData
                 .filter((post: Post) => post.likedBy.includes(currentUserIdNum))
                 .map((post: Post) => post._id)

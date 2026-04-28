@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Post } from "@/lib/models/Post";
 
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ postId: string }> }
+) {
   try {
     await connectDB();
     const body = await req.json();
+    const { postId } = await params;
 
-    const { postId, userId, action } = body; // action: "like" or "unlike"
+    const { userId, action } = body; // action: "like" or "unlike"
 
     if (!postId || !userId || !action) {
       return NextResponse.json(

@@ -15,7 +15,7 @@ export default function UserSearchBar() {
   const [suggestions, setSuggestions] = useState<UserSuggestion[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

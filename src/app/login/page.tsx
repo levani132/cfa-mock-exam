@@ -124,7 +124,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-linear-to-br from-cfa-navy via-cfa-navy-light to-cfa-navy flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.back()}
           className="text-gray-300 hover:text-white flex items-center gap-2 mb-8 text-sm transition-colors"
         >
           <FiArrowLeft /> Back to Home

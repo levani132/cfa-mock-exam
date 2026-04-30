@@ -17,13 +17,38 @@ export async function GET(req: NextRequest) {
     }
 
     const totalQuestions = await Question.countDocuments();
+    const attempts = user.questionAttempts || new Map();
+    const attemptedCount = attempts.size;
+
+    // Min attempt count across all attempted questions determines current cycle
+    // If not all questions attempted, min is 0
+    const minAttempts = attemptedCount < totalQuestions
+      ? 0
+      : Math.min(...Array.from(attempts.values() as Iterable<number>));
+    const completedCycles = minAttempts;
+
+    // "answeredCount" = how many questions have been answered more than minAttempts times
+    // This gives the progress within the current cycle
+    let answeredInCurrentCycle = 0;
+    for (const count of attempts.values()) {
+      if (count > minAttempts) {
+        answeredInCurrentCycle++;
+      }
+    }
+    // If all questions have been attempted at least once but not all have minAttempts+1,
+    // then answeredInCurrentCycle = those with count > minAttempts
+    // If some haven't been attempted at all, answeredInCurrentCycle = attemptedCount (those with count > 0)
+    if (attemptedCount < totalQuestions) {
+      answeredInCurrentCycle = attemptedCount;
+    }
+
     const includeIds = req.nextUrl.searchParams.get("includeIds") === "true";
 
     return NextResponse.json({
-      answeredCount: user.answeredQuestions.length,
+      answeredCount: answeredInCurrentCycle,
       totalQuestions,
-      completedCycles: user.completedCycles,
-      ...(includeIds ? { answeredIds: user.answeredQuestions } : {}),
+      completedCycles,
+      ...(includeIds ? { questionAttempts: Object.fromEntries(attempts) } : {}),
     });
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -44,27 +69,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Add new question IDs (avoid duplicates)
-    const existing = new Set(user.answeredQuestions.map(String));
-    const newIds = questionIds.filter((id: string) => !existing.has(String(id)));
-    
-    if (newIds.length > 0) {
-      user.answeredQuestions.push(...newIds);
+    // Increment attempt count for each question
+    if (!user.questionAttempts) {
+      user.questionAttempts = new Map();
     }
-
-    // Check if user has gone through all questions
-    const totalQuestions = await Question.countDocuments();
-    if (user.answeredQuestions.length >= totalQuestions) {
-      user.completedCycles += 1;
-      user.answeredQuestions = [];
+    for (const qId of questionIds) {
+      const key = String(qId);
+      const current = user.questionAttempts.get(key) || 0;
+      user.questionAttempts.set(key, current + 1);
     }
 
     await user.save();
 
+    const totalQuestions = await Question.countDocuments();
+    const attempts = user.questionAttempts;
+    const attemptedCount = attempts.size;
+    const minAttempts = attemptedCount < totalQuestions
+      ? 0
+      : Math.min(...Array.from(attempts.values() as Iterable<number>));
+    const completedCycles = minAttempts;
+
+    let answeredInCurrentCycle = 0;
+    if (attemptedCount < totalQuestions) {
+      answeredInCurrentCycle = attemptedCount;
+    } else {
+      for (const count of attempts.values()) {
+        if (count > minAttempts) {
+          answeredInCurrentCycle++;
+        }
+      }
+    }
+
     return NextResponse.json({
-      answeredCount: user.answeredQuestions.length,
+      answeredCount: answeredInCurrentCycle,
       totalQuestions,
-      completedCycles: user.completedCycles,
+      completedCycles,
     });
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });

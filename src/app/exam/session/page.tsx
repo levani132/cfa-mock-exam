@@ -211,20 +211,11 @@ export default function ExamSessionPage() {
       const count = isFullMockFlow(config) ? 180 : config.totalQuestions;
       url = `/api/questions?topics=${encodeURIComponent(topicsParam)}&count=${count}`;
 
-      // For custom mode, exclude already-answered questions
+      // For custom mode, send userId so API can prioritize least-attempted questions
       const userId = localStorage.getItem("cfa_user_id");
       if (config.mode === "custom" && userId) {
-        fetch(`/api/user/progress?userId=${userId}&includeIds=true`)
-          .then((r) => r.json())
-          .then((progress) => {
-            if (progress.answeredIds && progress.answeredIds.length > 0) {
-              url += `&exclude=${progress.answeredIds.join(",")}`;
-            }
-          })
-          .catch(() => {})
-          .finally(() => {
-            doFetch(url);
-          });
+        url += `&userId=${userId}`;
+        doFetch(url);
       } else {
         doFetch(url);
       }

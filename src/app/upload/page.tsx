@@ -212,7 +212,7 @@ export default function UploadPage() {
       <div className="min-h-screen bg-gradient-to-br from-cfa-navy to-cfa-navy-light flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.back()}
             className="text-gray-300 hover:text-white flex items-center gap-2 mb-8 text-sm"
           >
             <FiArrowLeft /> Back to Home
@@ -252,7 +252,7 @@ export default function UploadPage() {
       <header className="bg-cfa-navy text-white shadow-lg">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.back()}
             className="text-gray-300 hover:text-white transition-colors"
           >
             <FiArrowLeft className="text-xl" />

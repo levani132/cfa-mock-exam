@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { Question, TOPIC_WEIGHTS, type Topic } from "@/lib/models/Question";
 import { MockExam } from "@/lib/models/MockExam";
+import { User } from "@/lib/models/User";
 
 export async function GET(req: NextRequest) {
   try {
@@ -61,10 +62,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Valid count required" }, { status: 400 });
     }
 
-    // Parse exclude list (already-answered question IDs)
+    // Load question attempts from user profile if userId provided
+    const userIdParam = req.nextUrl.searchParams.get("userId");
+    let attemptsMap: Record<string, number> = {};
+    if (userIdParam) {
+      const user = await User.findOne({ numericId: parseInt(userIdParam, 10) });
+      if (user?.questionAttempts) {
+        attemptsMap = Object.fromEntries(user.questionAttempts);
+      }
+    }
+
+    // Legacy: parse exclude list (kept for backward compat)
     const excludeParam = req.nextUrl.searchParams.get("exclude");
     const excludeObjectIds: mongoose.Types.ObjectId[] = [];
-    if (excludeParam) {
+    if (excludeParam && Object.keys(attemptsMap).length === 0) {
       for (const raw of excludeParam.split(",")) {
         const id = raw.trim();
         if (id && mongoose.Types.ObjectId.isValid(id)) {
@@ -89,19 +100,88 @@ export async function GET(req: NextRequest) {
       assigned += count;
     });
 
-    // Fetch questions for each topic, excluding already-answered ones
+    // Fetch questions for each topic, prioritizing least-attempted ones
     const allQuestions: Array<Record<string, unknown>> = [];
+    const hasAttempts = Object.keys(attemptsMap).length > 0;
+
     for (const { topic, count } of topicCounts) {
       if (count <= 0) continue;
-      const matchFilter: Record<string, unknown> = { topic };
-      if (excludeObjectIds.length > 0) {
-        matchFilter._id = { $nin: excludeObjectIds };
+
+      if (hasAttempts) {
+        // Get IDs with their attempt counts for this topic
+        const topicAttemptIds = Object.entries(attemptsMap)
+          .filter(([id]) => mongoose.Types.ObjectId.isValid(id))
+          .map(([id, cnt]) => ({ id: new mongoose.Types.ObjectId(id), count: cnt }));
+
+        // Find the minimum attempt count across all tracked questions
+        const minCount = topicAttemptIds.length > 0
+          ? Math.min(...topicAttemptIds.map((a) => a.count))
+          : 0;
+
+        // First try: get questions never attempted or with minimum attempts
+        const leastAttemptedIds = topicAttemptIds
+          .filter((a) => a.count <= minCount)
+          .map((a) => a.id);
+
+        // Strategy: fetch unattempted questions first, then least-attempted
+        const matchFilter: Record<string, unknown> = { topic };
+        const attemptedIds = topicAttemptIds.map((a) => a.id);
+
+        // Phase 1: Questions never attempted for this topic
+        const unattempted = await Question.aggregate([
+          { $match: { ...matchFilter, _id: { $nin: attemptedIds } } },
+          { $sample: { size: count } },
+        ]);
+
+        if (unattempted.length >= count) {
+          allQuestions.push(...unattempted.slice(0, count));
+        } else {
+          allQuestions.push(...unattempted);
+          const remaining = count - unattempted.length;
+
+          // Phase 2: Least-attempted questions (those at minCount)
+          if (remaining > 0 && leastAttemptedIds.length > 0) {
+            const leastAttempted = await Question.aggregate([
+              { $match: { ...matchFilter, _id: { $in: leastAttemptedIds } } },
+              { $sample: { size: remaining } },
+            ]);
+            allQuestions.push(...leastAttempted);
+
+            // Phase 3: If still need more, get next tier
+            const stillRemaining = remaining - leastAttempted.length;
+            if (stillRemaining > 0) {
+              const usedIds = [
+                ...unattempted.map((q: Record<string, unknown>) => q._id),
+                ...leastAttempted.map((q: Record<string, unknown>) => q._id),
+              ];
+              const moreQuestions = await Question.aggregate([
+                { $match: { ...matchFilter, _id: { $nin: usedIds } } },
+                { $sample: { size: stillRemaining } },
+              ]);
+              allQuestions.push(...moreQuestions);
+            }
+          } else if (remaining > 0) {
+            // All questions have been attempted, just sample randomly
+            const usedIds = unattempted.map((q: Record<string, unknown>) => q._id);
+            const moreQuestions = await Question.aggregate([
+              { $match: { ...matchFilter, ...(usedIds.length > 0 ? { _id: { $nin: usedIds } } : {}) } },
+              { $sample: { size: remaining } },
+            ]);
+            allQuestions.push(...moreQuestions);
+          }
+        }
+      } else {
+        // Legacy path: simple exclude
+        const matchFilter: Record<string, unknown> = { topic };
+        if (excludeObjectIds.length > 0) {
+          matchFilter._id = { $nin: excludeObjectIds };
+        }
+        const questions = await Question.aggregate([
+          { $match: matchFilter },
+          { $sample: { size: count } },
+        ]);
+        allQuestions.push(...questions);
       }
-      const questions = await Question.aggregate([
-        { $match: matchFilter },
-        { $sample: { size: count } },
-      ]);
-      allQuestions.push(...questions);
     }
 
     // Shuffle

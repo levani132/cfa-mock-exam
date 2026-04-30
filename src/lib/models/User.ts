@@ -4,8 +4,9 @@ export interface IUser extends Document {
   numericId: number;
   name: string;
   passwordHash?: string;
-  answeredQuestions: string[];
-  completedCycles: number;
+  answeredQuestions: string[]; // kept for backward compat during migration
+  completedCycles: number; // kept for backward compat during migration
+  questionAttempts: Map<string, number>; // { questionId: timesAnswered }
   createdAt: Date;
   profilePicture?: string; // URL or base64
   coverPicture?: string; // URL or base64
@@ -18,6 +19,7 @@ const UserSchema = new Schema<IUser>({
   passwordHash: { type: String },
   answeredQuestions: { type: [String], default: [] },
   completedCycles: { type: Number, default: 0 },
+  questionAttempts: { type: Map, of: Number, default: () => new Map() },
   createdAt: { type: Date, default: Date.now },
   profilePicture: { type: String },
   coverPicture: { type: String },

@@ -139,6 +139,7 @@ function ExamReviewPage() {
     if (!examId) {
       const stored = sessionStorage.getItem("exam_result");
       if (stored) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setResult(JSON.parse(stored));
         return;
       }
@@ -201,7 +202,7 @@ function ExamReviewPage() {
       <header className="bg-cfa-navy text-white shadow-lg">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.back()}
             className="text-gray-300 hover:text-white transition-colors"
           >
             <FiArrowLeft className="text-xl" />

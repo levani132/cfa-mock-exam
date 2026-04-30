@@ -133,19 +133,21 @@ function ExamReviewPage() {
   }
 
   useEffect(() => {
-    // Try sessionStorage first (just finished exam)
-    const stored = sessionStorage.getItem("exam_result");
-    if (stored) {
-      setResult(JSON.parse(stored));
-      return;
-    }
-
-    // Fallback: load from API by examId (e.g. from history)
     const examId = searchParams.get("examId");
+
+    // If no explicit examId, try sessionStorage (just finished exam)
     if (!examId) {
+      const stored = sessionStorage.getItem("exam_result");
+      if (stored) {
+        setResult(JSON.parse(stored));
+        return;
+      }
       router.push("/exam/setup");
       return;
     }
+
+    // Clear stale sessionStorage when navigating to a specific exam
+    sessionStorage.removeItem("exam_result");
 
     fetch(`/api/exam?examId=${examId}`)
       .then((r) => r.json())

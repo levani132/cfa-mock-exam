@@ -14,6 +14,7 @@ import {
   FiAlertCircle,
   FiX,
 } from "react-icons/fi";
+import Header from "@/components/Header";
 
 const TOPICS = [
   "Ethical and Professional Standards",
@@ -249,20 +250,7 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-cfa-navy text-white shadow-lg">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="text-gray-300 hover:text-white transition-colors"
-          >
-            <FiArrowLeft className="text-xl" />
-          </button>
-          <div className="flex items-center gap-3">
-            <FiUpload className="text-cfa-gold text-xl" />
-            <h1 className="text-lg font-semibold">Upload Questions</h1>
-          </div>
-        </div>
-      </header>
+      <Header title="Upload Questions" icon={FiUpload} />
 
       <div className="max-w-4xl mx-auto px-6 py-8">
         {error && (

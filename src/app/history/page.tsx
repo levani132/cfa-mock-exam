@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { FiArrowLeft, FiClock, FiCalendar, FiTrendingUp } from "react-icons/fi";
+import { FiClock, FiCalendar, FiTrendingUp } from "react-icons/fi";
+import Header from "@/components/Header";
 
 interface ExamSummary {
   _id: string;
@@ -55,20 +56,7 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-cfa-navy text-white shadow-lg">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="text-gray-300 hover:text-white transition-colors"
-          >
-            <FiArrowLeft className="text-xl" />
-          </button>
-          <div className="flex items-center gap-3">
-            <FiTrendingUp className="text-cfa-gold text-xl" />
-            <h1 className="text-lg font-semibold">Exam History</h1>
-          </div>
-        </div>
-      </header>
+      <Header title="Exam History" icon={FiTrendingUp} />
 
       <div className="max-w-4xl mx-auto px-6 py-8">
         {loading ? (

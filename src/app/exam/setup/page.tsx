@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  FiArrowLeft,
   FiPlay,
   FiClock,
   FiCheckSquare,
@@ -12,6 +11,7 @@ import {
   FiBookOpen,
   FiSettings,
 } from "react-icons/fi";
+import Header from "@/components/Header";
 
 const TOPICS = [
   "Ethical and Professional Standards",
@@ -179,21 +179,7 @@ export default function ExamSetupPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-cfa-navy text-white shadow-lg">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="text-gray-300 hover:text-white transition-colors"
-          >
-            <FiArrowLeft className="text-xl" />
-          </button>
-          <div className="flex items-center gap-3">
-            <FiSettings className="text-cfa-gold text-xl" />
-            <h1 className="text-lg font-semibold">Exam Setup</h1>
-          </div>
-        </div>
-      </header>
+      <Header title="Exam Setup" icon={FiSettings} />
 
       <div className="max-w-4xl mx-auto px-6 py-8">
         {/* Mode Selection */}

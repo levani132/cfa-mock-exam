@@ -3,7 +3,6 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  FiArrowLeft,
   FiCheckCircle,
   FiXCircle,
   FiAward,
@@ -12,6 +11,7 @@ import {
   FiChevronUp,
   FiEdit3,
 } from "react-icons/fi";
+import Header from "@/components/Header";
 
 interface ExamResult {
   examId: string;
@@ -198,21 +198,7 @@ function ExamReviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-cfa-navy text-white shadow-lg">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="text-gray-300 hover:text-white transition-colors"
-          >
-            <FiArrowLeft className="text-xl" />
-          </button>
-          <div className="flex items-center gap-3">
-            <FiBarChart2 className="text-cfa-gold text-xl" />
-            <h1 className="text-lg font-semibold">Exam Results</h1>
-          </div>
-        </div>
-      </header>
+      <Header title="Exam Results" icon={FiBarChart2} />
 
       <div className="max-w-4xl mx-auto px-6 py-8">
         {/* Score Card */}

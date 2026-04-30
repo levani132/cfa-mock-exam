@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  FiArrowLeft,
   FiAward,
   FiBook,
   FiCheckCircle,
@@ -14,6 +13,7 @@ import {
   FiX,
   FiLoader,
 } from "react-icons/fi";
+import Header from "@/components/Header";
 import PostsFeed from "@/components/PostsFeed";
 
 interface UserStats {
@@ -210,18 +210,7 @@ export default function UserProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Top bar */}
-      <header className="bg-cfa-navy text-white shadow-lg sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-          >
-            <FiArrowLeft className="h-5 w-5" />
-          </button>
-          <span className="font-semibold text-lg">{user.name}&apos;s Profile</span>
-        </div>
-      </header>
+      <Header title={`${user.name}'s Profile`} sticky maxWidth="max-w-7xl" />
 
       <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8 items-start">
         {/* ── LEFT SIDEBAR ── */}

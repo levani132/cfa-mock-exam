@@ -39,7 +39,10 @@ export default function HomePage() {
             <div className="flex items-center gap-4 shrink-0">
               {userId ? (
                 <>
-                  <span className="text-sm text-gray-300 hidden md:inline">
+                  <span
+                    onClick={() => router.push(`/profile/${userId}`)}
+                    className="text-sm text-gray-300 hidden md:inline cursor-pointer hover:text-white transition-colors"
+                  >
                     Welcome, <span className="text-cfa-gold font-medium">{userName}</span>
                   </span>
                   <button

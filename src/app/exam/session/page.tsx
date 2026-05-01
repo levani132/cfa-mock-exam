@@ -573,20 +573,17 @@ export default function ExamSessionPage() {
         </div>
       </header>
 
-      {/* Paused overlay */}
+      {/* Paused banner (non-blocking) */}
       {isPaused && (
-        <div className="fixed inset-0 bg-cfa-navy/95 z-40 flex items-center justify-center">
-          <div className="text-center text-white">
-            <FiPause className="text-5xl text-cfa-gold mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Exam Paused</h2>
-            <p className="text-gray-300 mb-6">Questions are hidden while paused.</p>
-            <button
-              onClick={() => setIsPaused(false)}
-              className="bg-cfa-gold text-cfa-navy font-bold px-8 py-3 rounded-xl text-lg hover:bg-cfa-gold-light"
-            >
-              Resume Exam
-            </button>
-          </div>
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 bg-cfa-navy text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3">
+          <FiPause className="text-cfa-gold" />
+          <span className="font-medium text-sm">Timer Paused</span>
+          <button
+            onClick={() => setIsPaused(false)}
+            className="ml-2 bg-cfa-gold text-cfa-navy font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-cfa-gold-light transition-colors"
+          >
+            Resume
+          </button>
         </div>
       )}
 
@@ -740,7 +737,7 @@ export default function ExamSessionPage() {
             {/* Show Answer Button */}
             {config?.showCorrectAnswers && !revealedAnswers.has(globalIndex) && (
               <button
-                onClick={() => setRevealedAnswers(prev => new Set(prev).add(globalIndex))}
+                onClick={() => { setRevealedAnswers(prev => new Set(prev).add(globalIndex)); if (config?.canPauseTimer) setIsPaused(true); }}
                 className="w-full mb-6 py-3 rounded-xl border-2 border-dashed border-cfa-navy/30 text-cfa-navy/70 hover:border-cfa-navy/50 hover:text-cfa-navy hover:bg-cfa-navy/5 transition-all text-sm font-medium flex items-center justify-center gap-2"
               >
                 <FiEye /> Show Answer & Explanation

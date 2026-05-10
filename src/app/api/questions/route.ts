@@ -30,9 +30,17 @@ export async function GET(req: NextRequest) {
       if (!mock) {
         return NextResponse.json({ error: "Mock exam not found" }, { status: 404 });
       }
-      const questions = await Question.find({ _id: { $in: mock.questionIds } });
+      const questions = await Question.find({ _id: { $in: mock.questionIds } }).lean();
+      // $in doesn't guarantee result order, so re-sort by mock.questionIds.
+      // Otherwise the two-session split could land on the wrong boundary if
+      // MongoDB ever returns docs in a different order than insertion.
+      type LeanQ = (typeof questions)[number];
+      const byId = new Map<string, LeanQ>(questions.map((q: LeanQ) => [String(q._id), q]));
+      const ordered: LeanQ[] = mock.questionIds
+        .map((id: mongoose.Types.ObjectId) => byId.get(String(id)))
+        .filter((q: LeanQ | undefined): q is LeanQ => Boolean(q));
       return NextResponse.json({
-        questions: questions.map((q) => ({
+        questions: ordered.map((q) => ({
           _id: q._id,
           text: q.text,
           optionA: q.optionA,

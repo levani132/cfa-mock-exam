@@ -646,7 +646,20 @@ export function detectTopicFromExplanation(
 
   const text = explanation.toLowerCase();
 
-  // Module/LOS number → approximate reading ranges
+  // 1. Explicit topic name in the explanation. Most CFA materials cite the
+  //    canonical topic name directly (e.g. "Topic 5 – Financial Statement
+  //    Analysis"); this is far more reliable than guessing from module
+  //    numbers, especially for sources like AnalystPrep that re-number
+  //    modules per topic instead of globally.
+  //    Order longest-first so "Financial Statement Analysis" wins over
+  //    "Financial" if anything ambiguous ever shows up.
+  const namedKeys = Object.keys(TOPIC_MAP).sort((a, b) => b.length - a.length);
+  for (const key of namedKeys) {
+    if (text.includes(key)) return TOPIC_MAP[key];
+  }
+
+  // 2. Module/LOS number → approximate reading ranges. Only reliable for
+  //    sources that use global module numbering (Schweser, CFA Institute).
   const moduleMatch = text.match(/module\s+(\d+)/i);
   if (moduleMatch) {
     const n = parseInt(moduleMatch[1], 10);

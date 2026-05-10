@@ -15,7 +15,7 @@ export default function Header({ title, icon: Icon, sticky, maxWidth = "max-w-4x
   const router = useRouter();
 
   return (
-    <header className={`bg-cfa-navy text-white shadow-lg ${sticky ? "sticky top-0 z-10" : ""}`}>
+    <header className={`bg-cfa-navy text-white shadow-lg ${sticky ? "sticky top-0 z-30" : ""}`}>
       <div className={`${maxWidth} mx-auto px-6 py-4 flex items-center gap-4`}>
         <div className="flex items-center gap-1">
           <button

@@ -15,7 +15,16 @@ export async function GET(
     const { userId: userIdStr } = await params;
     const userId = parseInt(userIdStr, 10);
 
-    const user = await User.findOne({ numericId: userId }).lean();
+    const user = await User.findOne({ numericId: userId }).lean<{
+      numericId: number;
+      name: string;
+      createdAt: Date;
+      profilePicture?: string;
+      coverPicture?: string;
+      description?: string;
+      questionAttempts?: Map<string, number> | Record<string, number>;
+      answeredQuestions?: string[];
+    }>();
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -27,7 +36,21 @@ export async function GET(
       Question.countDocuments(),
     ]);
 
-    let totalExams = exams.length;
+    // Unique questions the user has ever attempted (matches the count shown on the
+    // exam setup page's "Your Progress" widget, so the two don't disagree).
+    // .lean() returns Maps as plain objects, so handle both shapes.
+    const attempts = user.questionAttempts;
+    let uniqueQuestionsAttempted = 0;
+    if (attempts instanceof Map) {
+      uniqueQuestionsAttempted = attempts.size;
+    } else if (attempts && typeof attempts === "object") {
+      uniqueQuestionsAttempted = Object.keys(attempts).length;
+    }
+    if (uniqueQuestionsAttempted === 0 && Array.isArray(user.answeredQuestions)) {
+      uniqueQuestionsAttempted = user.answeredQuestions.length;
+    }
+
+    const totalExams = exams.length;
     let averageScore = 0;
     let totalQuestions = 0;
     let correctAnswers = 0;
@@ -77,6 +100,7 @@ export async function GET(
         averageScore,
         topicBreakdown,
         totalQuestionsInDB,
+        uniqueQuestionsAttempted,
       },
     });
   } catch (err) {

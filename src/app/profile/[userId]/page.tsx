@@ -22,6 +22,7 @@ interface UserStats {
   correctAnswers: number;
   averageScore: number;
   totalQuestionsInDB: number;
+  uniqueQuestionsAttempted: number;
   topicBreakdown: Array<{
     topic: string;
     correct: number;
@@ -127,7 +128,7 @@ export default function UserProfilePage() {
 
     try {
       setIsSaving(true);
-      const res = await fetch(`/api/users/${user.numericId}`, {
+      const res = await fetch(`/api/users/${profile.user.numericId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -202,9 +203,12 @@ export default function UserProfilePage() {
   }
 
   const { user, stats } = profile;
+  // Use unique attempted count so this matches the "Your Progress" widget on
+  // the exam setup page. Summing exam.totalQuestions double-counts repeats.
+  const uniqueAttempted = stats.uniqueQuestionsAttempted ?? 0;
   const progressPct =
     stats.totalQuestionsInDB > 0
-      ? Math.round((stats.totalQuestions / stats.totalQuestionsInDB) * 100)
+      ? Math.min(100, Math.round((uniqueAttempted / stats.totalQuestionsInDB) * 100))
       : 0;
   const isOwn = currentUserId === String(user.numericId);
 
@@ -236,7 +240,7 @@ export default function UserProfilePage() {
                 </button>
               )}
             </div>
-            <div className="px-6 pt-1 pb-6 relative z-10">
+            <div className="px-6 pt-1 pb-6 relative">
               {/* Profile Picture */}
               <div className="-mt-10 mb-4">
                 {user.profilePicture ? (
@@ -336,7 +340,7 @@ export default function UserProfilePage() {
                 <span className="text-base font-normal text-gray-400">%</span>
               </span>
               <span className="text-sm text-gray-500 text-right">
-                {stats.totalQuestions.toLocaleString()}
+                {uniqueAttempted.toLocaleString()}
                 <span className="block text-xs text-gray-400">
                   of {stats.totalQuestionsInDB.toLocaleString()} Qs
                 </span>

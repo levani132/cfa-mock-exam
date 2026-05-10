@@ -46,11 +46,17 @@ export default function UploadPage() {
   const answersFileRef = useRef<HTMLInputElement>(null);
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
+  const [tab, setTab] = useState<"qbank" | "mock">("qbank");
   const [file, setFile] = useState<File | null>(null);
   const [answersFile, setAnswersFile] = useState<File | null>(null);
   const [uploadMode, setUploadMode] = useState<"combined" | "separate">("combined");
   const [topicOverride, setTopicOverride] = useState("");
   const [source, setSource] = useState("");
+  // Mock-exam-only fields. Saved questions also feed the qbank automatically;
+  // this just creates an additional MockExam doc grouping them.
+  const [mockName, setMockName] = useState("");
+  const [mockTimeLimit, setMockTimeLimit] = useState(270);
+  const [savedMock, setSavedMock] = useState<{ name: string; total: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [parsedQuestions, setParsedQuestions] = useState<ParsedQuestion[]>([]);
   const [saving, setSaving] = useState(false);
@@ -140,6 +146,11 @@ export default function UploadPage() {
       return;
     }
 
+    if (tab === "mock" && !mockName.trim()) {
+      setError("Mock exam name is required");
+      return;
+    }
+
     setSaving(true);
     setError("");
 
@@ -153,6 +164,14 @@ export default function UploadPage() {
         body: JSON.stringify({
           questions: validQuestions,
           source: source || file?.name || "PDF Upload",
+          mockExam:
+            tab === "mock"
+              ? {
+                  name: mockName.trim(),
+                  source: source || mockName.trim(),
+                  timeLimitMinutes: mockTimeLimit,
+                }
+              : undefined,
         }),
       });
 
@@ -166,6 +185,9 @@ export default function UploadPage() {
       const data = await res.json();
       setSavedCount(data.inserted);
       setSavedDuplicates(data.duplicates || 0);
+      if (data.mockExam) {
+        setSavedMock({ name: data.mockExam.name, total: data.mockExam.totalQuestions });
+      }
       setParsedQuestions([]);
       setParseStats(null);
     } catch {
@@ -192,6 +214,7 @@ export default function UploadPage() {
     setParseStats(null);
     setSavedCount(0);
     setSavedDuplicates(0);
+    setSavedMock(null);
     setError("");
   }
 
@@ -253,6 +276,37 @@ export default function UploadPage() {
       <Header title="Upload Questions" icon={FiUpload} />
 
       <div className="max-w-4xl mx-auto px-6 py-8">
+        {/* Tab selector */}
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          <button
+            onClick={() => {
+              setTab("qbank");
+              resetUpload();
+            }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === "qbank"
+                ? "border-cfa-gold text-cfa-navy"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Question Bank
+          </button>
+          <button
+            onClick={() => {
+              setTab("mock");
+              setUploadMode("separate");
+              resetUpload();
+            }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === "mock"
+                ? "border-cfa-gold text-cfa-navy"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Mock Exam
+          </button>
+        </div>
+
         {error && (
           <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm flex items-center gap-2">
             <FiAlertCircle className="shrink-0" />
@@ -269,9 +323,58 @@ export default function UploadPage() {
           </div>
         )}
 
+        {savedMock && (
+          <div className="mb-6 p-4 bg-emerald-50 text-emerald-700 rounded-xl text-sm flex items-center gap-2">
+            <FiCheck />
+            Mock exam <span className="font-semibold">{savedMock.name}</span> created
+            with {savedMock.total} questions. It&apos;s now available on the exam setup page.
+          </div>
+        )}
+
         {/* Upload Section */}
         <section className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-          <h2 className="font-bold text-cfa-navy mb-4">Upload PDF</h2>
+          <h2 className="font-bold text-cfa-navy mb-4">
+            {tab === "mock" ? "Upload Mock Exam PDF" : "Upload PDF"}
+          </h2>
+
+          {tab === "mock" && (
+            <div className="mb-4 p-3 bg-blue-50 text-blue-800 text-xs rounded-lg leading-relaxed">
+              Questions are saved to the bank automatically. Re-uploading another file
+              with the same mock name will append its questions to the existing mock —
+              useful for multi-session exams (upload Session 1, then Session 2 with the
+              same name).
+            </div>
+          )}
+
+          {tab === "mock" && (
+            <div className="grid sm:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mock Exam Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={mockName}
+                  onChange={(e) => setMockName(e.target.value)}
+                  placeholder="e.g., AnalystPrep Mock Exam 2024 #3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Time Limit (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={mockTimeLimit}
+                  onChange={(e) => setMockTimeLimit(parseInt(e.target.value, 10) || 0)}
+                  min={1}
+                  max={600}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Upload mode toggle */}
           <div className="flex gap-2 mb-4">
@@ -499,10 +602,15 @@ export default function UploadPage() {
                 </div>
                 <button
                   onClick={saveQuestions}
-                  disabled={saving || validCount === 0}
+                  disabled={saving || validCount === 0 || (tab === "mock" && !mockName.trim())}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50 text-sm"
                 >
-                  <FiSave /> {saving ? "Saving..." : `Save ${validCount} Valid Questions`}
+                  <FiSave />
+                  {saving
+                    ? "Saving..."
+                    : tab === "mock"
+                    ? `Save ${validCount} & Add to Mock`
+                    : `Save ${validCount} Valid Questions`}
                 </button>
               </div>
             </div>

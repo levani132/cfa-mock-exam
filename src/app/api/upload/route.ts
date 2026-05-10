@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { Question } from "@/lib/models/Question";
+import { MockExam } from "@/lib/models/MockExam";
 import {
   type ParsedQuestion,
   TOPICS,
@@ -183,7 +185,7 @@ export async function PUT(req: NextRequest) {
     }
 
     await connectDB();
-    const { questions, source } = await req.json();
+    const { questions, source, mockExam } = await req.json();
 
     if (!Array.isArray(questions) || questions.length === 0) {
       return NextResponse.json({ error: "Questions array required" }, { status: 400 });
@@ -192,6 +194,7 @@ export async function PUT(req: NextRequest) {
     let inserted = 0;
     let duplicates = 0;
     let errors = 0;
+    const questionIds: mongoose.Types.ObjectId[] = [];
 
     for (const q of questions) {
       if (!q.correctAnswer || !["A", "B", "C"].includes(q.correctAnswer)) {
@@ -202,7 +205,7 @@ export async function PUT(req: NextRequest) {
       const hash = questionHash(q.text, q.optionA, q.optionB, q.optionC);
 
       try {
-        const result = await Question.updateOne(
+        const doc = await Question.findOneAndUpdate(
           { textHash: hash },
           {
             $setOnInsert: {
@@ -218,10 +221,12 @@ export async function PUT(req: NextRequest) {
               images: q.images || [],
             },
           },
-          { upsert: true }
+          { upsert: true, new: true, setDefaultsOnInsert: true }
         );
 
-        if (result.upsertedCount > 0) {
+        questionIds.push(doc._id);
+        // A freshly-inserted doc will have a createdAt within the last few seconds.
+        if (doc.createdAt && Date.now() - doc.createdAt.getTime() < 5000) {
           inserted++;
         } else {
           duplicates++;
@@ -230,13 +235,54 @@ export async function PUT(req: NextRequest) {
         const mongoErr = e as { code?: number };
         if (mongoErr.code === 11000) {
           duplicates++;
+          const existing = await Question.findOne({ textHash: hash });
+          if (existing) questionIds.push(existing._id);
         } else {
           errors++;
         }
       }
     }
 
-    return NextResponse.json({ inserted, duplicates, errors });
+    // If the caller wants the upload to also produce a MockExam record, build it
+    // from every question we successfully resolved (newly inserted + dedup hits).
+    // If a mock with this name already exists (e.g. uploading session 2 after
+    // session 1), append the new IDs instead of replacing.
+    let mockExamDoc: { _id: string; name: string; totalQuestions: number } | null = null;
+    if (mockExam?.name && questionIds.length > 0) {
+      const existing = await MockExam.findOne({ name: mockExam.name });
+      if (existing) {
+        await MockExam.updateOne(
+          { _id: existing._id },
+          { $addToSet: { questionIds: { $each: questionIds } } }
+        );
+        const updated = await MockExam.findById(existing._id);
+        if (updated) {
+          updated.totalQuestions = updated.questionIds.length;
+          if (mockExam.timeLimitMinutes) updated.timeLimitMinutes = mockExam.timeLimitMinutes;
+          await updated.save();
+          mockExamDoc = {
+            _id: String(updated._id),
+            name: updated.name,
+            totalQuestions: updated.totalQuestions,
+          };
+        }
+      } else {
+        const created = await MockExam.create({
+          name: mockExam.name,
+          source: mockExam.source || source || mockExam.name,
+          questionIds,
+          totalQuestions: questionIds.length,
+          timeLimitMinutes: mockExam.timeLimitMinutes || 270,
+        });
+        mockExamDoc = {
+          _id: String(created._id),
+          name: created.name,
+          totalQuestions: created.totalQuestions,
+        };
+      }
+    }
+
+    return NextResponse.json({ inserted, duplicates, errors, mockExam: mockExamDoc });
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
